@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File Manager</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      /* Modern Color Palette */
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --secondary: #64748b;
+      --secondary-hover: #475569;
+      --success: #059669;
+      --success-hover: #047857;
+      --danger: #dc2626;
+      --danger-hover: #b91c1c;
+      --warning: #f59e0b;
+      
+      /* Neutral Colors */
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      
+      /* Semantic Colors */
+      --bg: #f9fafb;
+      --surface: #ffffff;
+      --border: #e5e7eb;
+      --text: #111827;
+      --text-secondary: #6b7280;
+      
+      /* Shadows */
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      
+      /* Spacing */
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 12px;
+      --spacing-lg: 16px;
+      --spacing-xl: 24px;
+      
+      /* Border Radius */
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      
+      /* Transitions */
+      --transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ================== LOGIN SCREEN ================== */
+    .login-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: var(--spacing-lg);
+    }
+
+    .login-box {
+      background: var(--surface);
+      padding: 40px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .login-box h1 {
+      margin-bottom: 8px;
+      color: var(--text);
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .login-box p {
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    .form-group {
+      margin-bottom: var(--spacing-lg);
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: var(--spacing-sm);
+      color: var(--text);
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      transition: var(--transition);
+      background: var(--surface);
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    /* ================== BUTTONS ================== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--spacing-sm);
+      padding: 8px 14px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+      line-height: 1.5;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .btn-primary:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn-secondary {
+      background: var(--gray-100);
+      color: var(--gray-700);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--gray-200);
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+
+    .btn-success:hover:not(:disabled) {
+      background: var(--success-hover);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: var(--danger-hover);
+    }
+
+    .btn-sm {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .icon-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 6px;
+      border-radius: var(--radius-sm);
+      color: var(--gray-500);
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+    }
+
+    .icon-btn:hover {
+      background: var(--gray-100);
+      color: var(--gray-700);
+    }
+
+    .icon-btn.danger:hover {
+      background: #fee2e2;
+      color: var(--danger);
+    }
+
+    /* ================== MAIN APP ================== */
+    .app-container {
+      display: none;
+      min-height: 100vh;
+      flex-direction: column;
+    }
+
+    .app-container.active {
+      display: flex;
+    }
+
+    /* Compact Header - Single line */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 var(--spacing-xl);
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-lg);
+    }
+
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-md);
+    }
+
+    .user-info {
+      color: var(--text-secondary);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      padding: 6px 12px;
+      background: var(--gray-100);
+      border-radius: var(--radius-sm);
+    }
+
+    /* Compact Toolbar - Combined with breadcrumb */
+    .toolbar-breadcrumb {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: var(--spacing-md) var(--spacing-xl);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--spacing-lg);
+      flex-wrap: wrap;
+    }
+
+    .toolbar-left {
+      display: flex;
+      gap: var(--spacing-sm);
+      flex-wrap: wrap;
+    }
+
+    .toolbar-right {
+      display: flex;
+      gap: var(--spacing-sm);
+      align-items: center;
+    }
+
+    /* Breadcrumb - Inline */
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      min-width: 200px;
+    }
+
+    .breadcrumb-item {
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition);
+      padding: 4px 6px;
+      border-radius: var(--radius-sm);
+    }
+
+    .breadcrumb-item:hover {
+      color: var(--primary);
+      background: var(--gray-100);
+    }
+
+    .breadcrumb-item.active {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .breadcrumb-separator {
+      color: var(--gray-300);
+      font-size: 12px;
+    }
+
+    /* Compact Storage Info - Horizontal inline */
+    .storage-info {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--spacing-lg);
+      padding: 6px 12px;
+      background: var(--gray-50);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+    }
+
+    .storage-stat {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-xs);
+      white-space: nowrap;
+    }
+
+    .storage-stat-value {
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .storage-stat-label {
+      color: var(--text-secondary);
+    }
+
+    /* Search Box */
+    .search-box {
+      position: relative;
+      min-width: 200px;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 8px 12px 8px 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      transition: var(--transition);
+      background: var(--surface);
+    }
+
+    .search-box input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--gray-400);
+      font-size: 14px;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      padding: var(--spacing-lg) var(--spacing-xl);
+      max-width: 100%;
+      overflow: auto;
+    }
+
+    /* Alert */
+    .alert {
+      padding: 12px var(--spacing-lg);
+      border-radius: var(--radius-sm);
+      margin-bottom: var(--spacing-lg);
+      display: none;
+      align-items: center;
+      gap: var(--spacing-sm);
+      font-size: 13px;
+      animation: slideDown 0.2s ease-out;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .alert.active {
+      display: flex;
+    }
+
+    .alert-success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #6ee7b7;
+    }
+
+    .alert-error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+
+    /* File List Container */
+    .file-list-container {
+      background: var(--surface);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .file-list {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: var(--gray-50);
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      padding: 12px var(--spacing-lg);
+      text-align: left;
+      font-weight: 600;
+      color: var(--gray-700);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 12px var(--spacing-lg);
+      border-bottom: 1px solid var(--gray-100);
+      font-size: 13px;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover {
+      background: var(--gray-50);
+    }
+
+    .file-icon {
+      font-size: 18px;
+      margin-right: var(--spacing-sm);
+      min-width: 20px;
+      display: inline-block;
+    }
+
+    /* File thumbnail/icon container */
+    .file-thumbnail {
+      width: 32px;
+      height: 32px;
+      margin-right: 10px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+      background: var(--gray-100);
+      border: 1px solid var(--border);
+    }
+
+    .file-thumbnail img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .file-type-icon {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 600;
+      color: white;
+      border-radius: 3px;
+    }
+
+    /* File type specific colors */
+    .icon-pdf { background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); }
+    .icon-doc { background: linear-gradient(135deg, #2980b9 0%, #1f618d 100%); }
+    .icon-xls { background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%); }
+    .icon-ppt { background: linear-gradient(135deg, #d35400 0%, #a04000 100%); }
+    .icon-zip { background: linear-gradient(135deg, #8e44ad 0%, #6c3483 100%); }
+    .icon-code { background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%); }
+    .icon-video { background: linear-gradient(135deg, #e84393 0%, #c0186a 100%); }
+    .icon-audio { background: linear-gradient(135deg, #00b894 0%, #00967d 100%); }
+    .icon-txt { background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%); }
+    .icon-folder { background: linear-gradient(135deg, #f39c12 0%, #d68910 100%); font-size: 18px; }
+    .icon-default { background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%); }
+
+    .file-name {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      color: var(--text);
+      font-weight: 500;
+      transition: var(--transition);
+      padding: 4px 0;
+    }
+
+    .file-name:hover {
+      color: var(--primary);
+    }
+
+    .file-actions {
+      display: flex;
+      gap: 4px;
+      justify-content: flex-end;
+    }
+
+    /* Checkbox styling */
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: var(--primary);
+    }
+
+    .file-checkbox {
+      padding: 0 !important;
+      width: 40px;
+      text-align: center;
+    }
+
+    tr.selected {
+      background-color: var(--primary-light) !important;
+    }
+
+    tr.selected:hover {
+      background-color: #dbeafe !important;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: var(--spacing-lg);
+      opacity: 0.5;
+    }
+
+    .empty-state h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .empty-state p {
+      font-size: 13px;
+    }
+
+    /* Loading */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .spinner {
+      border: 3px solid var(--gray-200);
+      border-top: 3px solid var(--primary);
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* ================== MODAL ================== */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--surface);
+      padding: 24px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: slideUp 0.2s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .modal-header {
+      margin-bottom: var(--spacing-lg);
+    }
+
+    .modal-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .modal-footer {
+      margin-top: 24px;
+      display: flex;
+      gap: var(--spacing-sm);
+      justify-content: flex-end;
+    }
+
+    /* Upload Area */
+    .upload-area {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-md);
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+      margin-bottom: var(--spacing-lg);
+      background: var(--gray-50);
+    }
+
+    .upload-area:hover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .upload-area.drag-over {
+      border-color: var(--primary);
+      background: var(--primary-light);
+      transform: scale(1.02);
+    }
+
+    .upload-icon {
+      font-size: 40px;
+      color: var(--gray-400);
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .upload-area p {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .upload-area strong {
+      color: var(--primary);
+    }
+
+    /* ================== RESPONSIVE ================== */
+    @media (max-width: 1024px) {
+      .storage-info {
+        flex-wrap: wrap;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .header {
+        height: auto;
+        padding: var(--spacing-md);
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-sm);
+      }
+
+      .header-left, .header-right {
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .toolbar-breadcrumb {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-md);
+      }
+
+      .toolbar-left, .toolbar-right {
+        flex-wrap: wrap;
+      }
+
+      .breadcrumb {
+        min-width: auto;
+        flex-wrap: wrap;
+      }
+
+      .storage-info {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-sm);
+      }
+
+      .storage-stat {
+        justify-content: space-between;
+      }
+
+      .search-box {
+        width: 100%;
+        min-width: auto;
+      }
+
+      .main-content {
+        padding: var(--spacing-md);
+      }
+
+      th, td {
+        padding: 10px var(--spacing-md);
+      }
+
+      .file-actions {
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        width: 100%;
+      }
+
+      .modal-content {
+        width: 95%;
+        padding: var(--spacing-lg);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .header h1 {
+        font-size: 14px;
+      }
+
+      .btn {
+        padding: 8px 12px;
+        font-size: 12px;
+      }
+
+      th, td {
+        padding: 8px;
+        font-size: 12px;
+      }
+
+      .file-icon {
+        font-size: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="loginContainer" class="login-container">
+    <div class="login-box">
+      <h1>📁 File Manager</h1>
+      <p>Sign in to manage your files</p>
+      
+      <div id="loginAlert" class="alert alert-error"></div>
+      
+      <form id="loginForm" method="post" action="/api/login">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required autocomplete="username">
+        </div>
+        
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%;">
+          🔐 Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="appContainer" class="app-container">
+    <!-- Compact Header -->
+    <div class="header">
+      <div class="header-left">
+        <h1>📁 File Manager</h1>
+        <div class="storage-info">
+          <div class="storage-stat">
+            <span class="storage-stat-value" id="totalSize">-</span>
+            <span class="storage-stat-label">Storage</span>
+          </div>
+          <div class="storage-stat">
+            <span class="storage-stat-value" id="fileCount">-</span>
+            <span class="storage-stat-label">Files</span>
+          </div>
+          <div class="storage-stat">
+            <span class="storage-stat-value" id="folderCount">-</span>
+            <span class="storage-stat-label">Folders</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="user-info">
+          👤 <span id="currentUser"></span>
+        </span>
+        <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+      </div>
+    </div>
+
+    <!-- Compact Toolbar with Breadcrumb -->
+    <div class="toolbar-breadcrumb">
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: 1;">
+        <div class="breadcrumb" id="breadcrumb"></div>
+        <div class="toolbar-left">
+          <button class="btn btn-primary btn-sm" onclick="openUploadModal()">
+            📤 Upload Files
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="openFolderUploadModal()">
+            📁 Upload Folder
+          </button>
+          <button class="btn btn-success btn-sm" onclick="openCreateFolderModal()">
+            ➕ New Folder
+          </button>
+          <button class="btn btn-danger btn-sm" id="bulkDeleteBtn" onclick="bulkDelete()" style="display: none;">
+            🗑️ Delete Selected (<span id="selectedCount">0</span>)
+          </button>
+        </div>
+      </div>
+      <div class="toolbar-right">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="searchInput" placeholder="Search files..." onkeyup="handleSearch(event)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Alert -->
+      <div id="alert" class="alert"></div>
+
+      <!-- File List -->
+      <div class="file-list-container">
+        <div id="loading" class="loading">
+          <div class="spinner"></div>
+          <p>Loading...</p>
+        </div>
+        
+        <div id="fileListContent" class="file-list">
+          <table id="fileTable">
+            <thead>
+              <tr>
+                <th style="width: 40px;">
+                  <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" style="cursor: pointer;">
+                </th>
+                <th style="width: 45%;">Name</th>
+                <th style="width: 15%;">Size</th>
+                <th style="width: 20%;">Modified</th>
+                <th style="width: 15%; text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="fileTableBody">
+            </tbody>
+          </table>
+        </div>
+
+        <div id="emptyState" class="empty-state" style="display: none;">
+          <div class="empty-state-icon">📂</div>
+          <h3>No files yet</h3>
+          <p>Upload your first file to get started</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Modal -->
+  <div id="uploadModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📤 Upload Files</h2>
+      </div>
+      
+      <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+        <div class="upload-icon">☁️</div>
+        <p><strong>Click to browse</strong> or drag and drop files here</p>
+        <p style="font-size: 11px; color: var(--gray-400); margin-top: 8px;">Maximum file size: 100MB per file</p>
+      </div>
+      
+      <input type="file" id="fileInput" multiple style="display: none;" onchange="handleFileSelect(event)">
+      <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;" onchange="handleFolderSelect(event)">
+      
+      <div id="selectedFiles"></div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+        <button class="btn btn-primary" id="uploadBtn" onclick="uploadFiles()" disabled>Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Folder Modal -->
+  <div id="createFolderModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📁 Create New Folder</h2>
+      </div>
+      
+      <div class="form-group">
+        <label for="folderName">Folder Name</label>
+        <input type="text" id="folderName" placeholder="Enter folder name">
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCreateFolderModal()">Cancel</button>
+        <button class="btn btn-success" onclick="createFolder()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename Modal -->
+  <div id="renameModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>✏️ Rename</h2>
+      </div>
+      
+      <div class="form-group">
+        <label for="newName">New Name</label>
+        <input type="text" id="newName" placeholder="Enter new name">
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeRenameModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmRename()">Rename</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/admin/app.js"></script>
+</body>
+</html>
+

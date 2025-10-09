@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File Manager</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #3b82f6;
+      --primary-dark: #2563eb;
+      --secondary: #64748b;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --text: #1e293b;
+      --text-light: #64748b;
+      --border: #e2e8f0;
+      --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    /* Login Screen */
+    .login-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .login-box {
+      background: var(--surface);
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .login-box h1 {
+      margin-bottom: 10px;
+      color: var(--text);
+      font-size: 28px;
+    }
+
+    .login-box p {
+      color: var(--text-light);
+      margin-bottom: 30px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      width: 100%;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+    }
+
+    .btn-secondary {
+      background: var(--secondary);
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #475569;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #059669;
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Main App */
+    .app-container {
+      display: none;
+    }
+
+    .app-container.active {
+      display: block;
+    }
+
+    /* Header */
+    .header {
+      background: var(--surface);
+      padding: 20px 30px;
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      color: var(--text);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .user-info {
+      color: var(--text-light);
+      font-size: 14px;
+    }
+
+    /* Toolbar */
+    .toolbar {
+      background: var(--surface);
+      padding: 20px 30px;
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    .toolbar-left {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-right {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .search-box {
+      position: relative;
+    }
+
+    .search-box input {
+      padding: 10px 16px 10px 40px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      width: 250px;
+    }
+
+    .search-box input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-light);
+    }
+
+    /* Breadcrumb */
+    .breadcrumb {
+      background: var(--surface);
+      padding: 15px 30px;
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      flex-wrap: wrap;
+    }
+
+    .breadcrumb-item {
+      color: var(--text-light);
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .breadcrumb-item:hover {
+      color: var(--primary);
+    }
+
+    .breadcrumb-item.active {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .breadcrumb-separator {
+      color: var(--text-light);
+    }
+
+    /* Storage Info */
+    .storage-info {
+      background: var(--surface);
+      padding: 20px 30px;
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+    }
+
+    .storage-stat {
+      text-align: center;
+    }
+
+    .storage-stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 5px;
+    }
+
+    .storage-stat-label {
+      font-size: 14px;
+      color: var(--text-light);
+    }
+
+    /* File List */
+    .file-list-container {
+      background: var(--surface);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .file-list {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: var(--bg);
+    }
+
+    th {
+      padding: 16px 20px;
+      text-align: left;
+      font-weight: 600;
+      color: var(--text);
+      font-size: 14px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    td {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+
+    tr:hover {
+      background: var(--bg);
+    }
+
+    .file-icon {
+      font-size: 20px;
+      margin-right: 10px;
+    }
+
+    .file-name {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .file-name:hover {
+      color: var(--primary);
+    }
+
+    .file-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 6px;
+      color: var(--text-light);
+      transition: all 0.2s;
+      font-size: 16px;
+    }
+
+    .icon-btn:hover {
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .icon-btn.danger:hover {
+      background: #fee2e2;
+      color: var(--danger);
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--surface);
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg);
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      margin-bottom: 20px;
+    }
+
+    .modal-header h2 {
+      font-size: 20px;
+      color: var(--text);
+    }
+
+    .modal-footer {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    /* File Upload */
+    .upload-area {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 20px;
+    }
+
+    .upload-area:hover {
+      border-color: var(--primary);
+      background: var(--bg);
+    }
+
+    .upload-area.drag-over {
+      border-color: var(--primary);
+      background: #eff6ff;
+    }
+
+    .upload-icon {
+      font-size: 48px;
+      color: var(--text-light);
+      margin-bottom: 10px;
+    }
+
+    /* Alert */
+    .alert {
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .alert.active {
+      display: flex;
+    }
+
+    .alert-success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #6ee7b7;
+    }
+
+    .alert-error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-light);
+    }
+
+    .empty-state-icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+      opacity: 0.5;
+    }
+
+    /* Loading */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      color: var(--text-light);
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .spinner {
+      border: 3px solid var(--border);
+      border-top: 3px solid var(--primary);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 10px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container {
+        padding: 10px;
+      }
+
+      .header, .toolbar, .breadcrumb, .storage-info, .file-list-container {
+        padding: 15px;
+      }
+
+      .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .toolbar-left, .toolbar-right {
+        width: 100%;
+      }
+
+      .search-box input {
+        width: 100%;
+      }
+
+      th, td {
+        padding: 12px 10px;
+      }
+
+      .file-actions {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="loginContainer" class="login-container">
+    <div class="login-box">
+      <h1>📁 File Manager</h1>
+      <p>Sign in to manage your files</p>
+      
+      <div id="loginAlert" class="alert alert-error"></div>
+      
+      <form id="loginForm" method="post" action="/api/login">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required autocomplete="username">
+        </div>
+        
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+        
+        <button type="submit" class="btn btn-primary">
+          🔐 Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="appContainer" class="app-container">
+    <div class="container">
+      <!-- Header -->
+      <div class="header">
+        <div class="header-left">
+          <h1>📁 File Manager</h1>
+        </div>
+        <div class="header-right">
+          <span class="user-info">👤 <span id="currentUser"></span></span>
+          <button class="btn btn-secondary" onclick="logout()">Logout</button>
+        </div>
+      </div>
+
+      <!-- Alert -->
+      <div id="alert" class="alert"></div>
+
+      <!-- Storage Info -->
+      <div class="storage-info">
+        <div class="storage-stat">
+          <div class="storage-stat-value" id="totalSize">-</div>
+          <div class="storage-stat-label">Total Size</div>
+        </div>
+        <div class="storage-stat">
+          <div class="storage-stat-value" id="fileCount">-</div>
+          <div class="storage-stat-label">Files</div>
+        </div>
+        <div class="storage-stat">
+          <div class="storage-stat-value" id="folderCount">-</div>
+          <div class="storage-stat-label">Folders</div>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <button class="btn btn-primary" onclick="openUploadModal()">
+            📤 Upload Files
+          </button>
+          <button class="btn btn-success" onclick="openCreateFolderModal()">
+            📁 New Folder
+          </button>
+        </div>
+        <div class="toolbar-right">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="searchInput" placeholder="Search files..." onkeyup="handleSearch(event)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Breadcrumb -->
+      <div class="breadcrumb" id="breadcrumb"></div>
+
+      <!-- File List -->
+      <div class="file-list-container">
+        <div id="loading" class="loading">
+          <div class="spinner"></div>
+          <p>Loading...</p>
+        </div>
+        
+        <div id="fileListContent" class="file-list">
+          <table id="fileTable">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Size</th>
+                <th>Modified</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="fileTableBody">
+            </tbody>
+          </table>
+        </div>
+
+        <div id="emptyState" class="empty-state" style="display: none;">
+          <div class="empty-state-icon">📂</div>
+          <h3>No files yet</h3>
+          <p>Upload your first file to get started</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Modal -->
+  <div id="uploadModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📤 Upload Files</h2>
+      </div>
+      
+      <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+        <div class="upload-icon">☁️</div>
+        <p><strong>Click to browse</strong> or drag and drop files here</p>
+        <p style="font-size: 12px; color: var(--text-light); margin-top: 10px;">Maximum file size: 100MB</p>
+      </div>
+      
+      <input type="file" id="fileInput" multiple style="display: none;" onchange="handleFileSelect(event)">
+      
+      <div id="selectedFiles"></div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+        <button class="btn btn-primary" id="uploadBtn" onclick="uploadFiles()" disabled>Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Folder Modal -->
+  <div id="createFolderModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📁 Create New Folder</h2>
+      </div>
+      
+      <div class="form-group">
+        <label for="folderName">Folder Name</label>
+        <input type="text" id="folderName" placeholder="Enter folder name">
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCreateFolderModal()">Cancel</button>
+        <button class="btn btn-success" onclick="createFolder()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename Modal -->
+  <div id="renameModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>✏️ Rename</h2>
+      </div>
+      
+      <div class="form-group">
+        <label for="newName">New Name</label>
+        <input type="text" id="newName" placeholder="Enter new name">
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeRenameModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmRename()">Rename</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/admin/app.js"></script>
+</body>
+</html>
+
