@@ -1,4 +1,4 @@
-# 📁 Simple File Manager
+# 📁 Simple File Manager with API Support
 
 A beautiful, secure file manager application with authentication for managing and sharing files through a web interface. Perfect for personal use, small teams, or as a simple CDN for your website assets.
 
@@ -26,6 +26,7 @@ Simple File Manager is a web-based application that allows you to upload, organi
 
 **Access Pattern:**
 - **Admin Panel:** `http://yourdomain.com/admin` (password protected)
+- **API Documentation:** `http://yourdomain.com/api-docs` (accessible after login)
 - **Public Files:** `http://yourdomain.com/path/to/file.jpg` (no authentication required)
 - **REST API:** `http://yourdomain.com/api/*` (authentication required)
 
@@ -328,6 +329,19 @@ curl -H "Authorization: Bearer YOUR_TOKEN" http://yourdomain.com/api/files
 # Method 2: URL Parameter
 curl "http://yourdomain.com/api/files?apiKey=YOUR_TOKEN"
 ```
+
+### Viewing API Documentation
+
+Click the **"📖 API Docs"** button in the header to access complete API documentation in a separate page. The API docs page includes:
+
+- Complete endpoint reference
+- Authentication methods (Session & API Token)
+- Request/response examples
+- Code examples (Bash, Python, Node.js)
+- Error handling guide
+- Best practices
+
+**Direct Access:** `http://localhost:3000/api-docs`
 
 ### Accessing Files Publicly
 
@@ -1894,11 +1908,24 @@ If you encounter a problem:
 
 ## License
 
-ISC License
+MIT License
 
-Copyright (c) 2024
+Copyright (c) 2024-2025 Simple File Manager Contributors
 
-Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+This project is licensed under the MIT License with attribution requirements.
+
+**You are free to:**
+- ✅ Use commercially
+- ✅ Modify and distribute
+- ✅ Use privately
+- ✅ Sublicense
+
+**You must:**
+- 📝 Include the license and copyright notice
+- 🏷️ Give credit with "Powered by Simple File Manager"
+- ⚠️ Not remove credits or attribution from source code
+
+See the [LICENSE](LICENSE) file for complete terms.
 
 ---
 

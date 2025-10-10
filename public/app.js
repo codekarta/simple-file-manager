@@ -5,10 +5,22 @@ let renameTarget = null;
 let selectedItems = new Set(); // For bulk delete
 let currentUser = null; // Store current user info
 
+// Custom modal callbacks
+let customAlertCallback = null;
+let customConfirmCallback = null;
+let customPromptCallback = null;
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
   checkAuth();
   setupEventListeners();
+  
+  // Generate initial random password when user management modal is opened
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('[onclick*="openUserManagement"]')) {
+      setTimeout(() => generateRandomPassword(), 100);
+    }
+  });
 });
 
 // Setup event listeners
@@ -489,7 +501,7 @@ async function createFolder() {
   const name = document.getElementById('folderName').value.trim();
   
   if (!name) {
-    alert('Please enter a folder name');
+    await customAlert('Please enter a folder name', 'Missing Folder Name');
     return;
   }
   
@@ -518,7 +530,8 @@ async function createFolder() {
 
 // Delete
 async function deleteItem(path, name) {
-  if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+  const confirmed = await customConfirm(`Are you sure you want to delete "${name}"?`, 'Confirm Deletion');
+  if (!confirmed) {
     return;
   }
   
@@ -560,7 +573,7 @@ async function confirmRename() {
   const newName = document.getElementById('newName').value.trim();
   
   if (!newName) {
-    alert('Please enter a new name');
+    await customAlert('Please enter a new name', 'Missing Name');
     return;
   }
   
@@ -593,6 +606,25 @@ function downloadFile(path) {
 
 // Search
 let searchTimeout;
+let isRegexEnabled = false;
+
+function toggleRegex() {
+  isRegexEnabled = !isRegexEnabled;
+  const regexToggle = document.getElementById('regexToggle');
+  
+  if (isRegexEnabled) {
+    regexToggle.classList.add('active');
+  } else {
+    regexToggle.classList.remove('active');
+  }
+  
+  // Re-trigger search if there's text
+  const searchInput = document.getElementById('searchInput');
+  if (searchInput.value.trim().length >= 2) {
+    handleSearch({ target: searchInput });
+  }
+}
+
 function handleSearch(event) {
   clearTimeout(searchTimeout);
   
@@ -604,22 +636,24 @@ function handleSearch(event) {
   }
   
   searchTimeout = setTimeout(() => {
-    searchFiles(query);
+    searchFiles(query, isRegexEnabled);
   }, 500);
 }
 
-async function searchFiles(query) {
+async function searchFiles(query, useRegex = false) {
   showLoading(true);
   
   try {
-    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+    const url = `/api/search?q=${encodeURIComponent(query)}&regex=${useRegex}`;
+    const response = await fetch(url, {
       credentials: 'include'
     });
     const data = await response.json();
     
     if (response.ok) {
       renderFileList(data.results);
-      document.getElementById('breadcrumb').innerHTML = `<span class="breadcrumb-item active">🔍 Search results for "${query}"</span>`;
+      const searchType = useRegex ? ' (Regex)' : '';
+      document.getElementById('breadcrumb').innerHTML = `<span class="breadcrumb-item active">🔍 Search results for "${query}"${searchType}</span>`;
     } else {
       showAlert('alert', data.error || 'Search failed', 'error');
     }
@@ -728,7 +762,8 @@ async function bulkDelete() {
   
   const message = `Are you sure you want to delete ${count} item(s)? This action cannot be undone.`;
   
-  if (!confirm(message)) {
+  const confirmed = await customConfirm(message, 'Confirm Bulk Deletion');
+  if (!confirmed) {
     return;
   }
   
@@ -805,6 +840,78 @@ function showAlert(elementId, message, type) {
   }, 5000);
 }
 
+// ========== CUSTOM MODAL FUNCTIONS ==========
+
+// Custom Alert
+function customAlert(message, title = 'Alert') {
+  return new Promise((resolve) => {
+    document.getElementById('customAlertTitle').textContent = title;
+    document.getElementById('customAlertMessage').textContent = message;
+    document.getElementById('customAlertModal').classList.add('active');
+    customAlertCallback = resolve;
+  });
+}
+
+function closeCustomAlert() {
+  document.getElementById('customAlertModal').classList.remove('active');
+  if (customAlertCallback) {
+    customAlertCallback();
+    customAlertCallback = null;
+  }
+}
+
+// Custom Confirm
+function customConfirm(message, title = 'Confirm') {
+  return new Promise((resolve) => {
+    document.getElementById('customConfirmTitle').textContent = title;
+    document.getElementById('customConfirmMessage').textContent = message;
+    document.getElementById('customConfirmModal').classList.add('active');
+    customConfirmCallback = resolve;
+  });
+}
+
+function closeCustomConfirm(result) {
+  document.getElementById('customConfirmModal').classList.remove('active');
+  if (customConfirmCallback) {
+    customConfirmCallback(result);
+    customConfirmCallback = null;
+  }
+}
+
+// Custom Prompt
+function customPrompt(message, title = 'Input Required') {
+  return new Promise((resolve) => {
+    document.getElementById('customPromptTitle').textContent = title;
+    document.getElementById('customPromptMessage').textContent = message;
+    document.getElementById('customPromptInput').value = '';
+    document.getElementById('customPromptModal').classList.add('active');
+    
+    // Focus on input
+    setTimeout(() => {
+      document.getElementById('customPromptInput').focus();
+    }, 100);
+    
+    // Handle Enter key
+    const handleEnter = (e) => {
+      if (e.key === 'Enter') {
+        closeCustomPrompt(document.getElementById('customPromptInput').value);
+        document.getElementById('customPromptInput').removeEventListener('keypress', handleEnter);
+      }
+    };
+    document.getElementById('customPromptInput').addEventListener('keypress', handleEnter);
+    
+    customPromptCallback = resolve;
+  });
+}
+
+function closeCustomPrompt(result) {
+  document.getElementById('customPromptModal').classList.remove('active');
+  if (customPromptCallback) {
+    customPromptCallback(result);
+    customPromptCallback = null;
+  }
+}
+
 // ========== USER MANAGEMENT FUNCTIONS ==========
 
 // Open user settings
@@ -829,17 +936,15 @@ async function loadUserInfo() {
       currentUser = data.user;
       
       // Display API key if exists
-      const apiKeyDisplay = document.getElementById('apiKeyDisplay');
       const noApiKeyMsg = document.getElementById('noApiKeyMsg');
       const apiKeyValue = document.getElementById('apiKeyValue');
       
-      if (data.user.hasApiKey) {
-        apiKeyDisplay.style.display = 'block';
+      if (data.user.hasApiKey && data.user.apiKey) {
         noApiKeyMsg.style.display = 'none';
-        apiKeyValue.textContent = data.user.apiKey || '********';
+        apiKeyValue.value = data.user.apiKey;
       } else {
-        apiKeyDisplay.style.display = 'none';
         noApiKeyMsg.style.display = 'block';
+        apiKeyValue.value = '';
       }
     }
   } catch (error) {
@@ -893,7 +998,7 @@ async function changePassword() {
 
 // Generate API token
 async function generateApiToken() {
-  const password = prompt('Enter your password to generate API token:');
+  const password = await customPrompt('Enter your password to generate API token:', 'Generate API Token');
   
   if (!password) {
     return;
@@ -914,7 +1019,7 @@ async function generateApiToken() {
       loadUserInfo();
       
       // Show the API key in a copyable format
-      alert(`Your new API token (save this securely):\n\n${data.apiKey}\n\nYou can use it in Bearer token or as URL parameter.`);
+      await customAlert(`Your new API token (save this securely):\n\n${data.apiKey}\n\nYou can use it in Bearer token or as URL parameter.`, 'API Token Generated');
     } else {
       showAlert('userSettingsAlert', data.error || 'Failed to generate token', 'error');
     }
@@ -925,11 +1030,12 @@ async function generateApiToken() {
 
 // Delete API token
 async function deleteApiToken() {
-  if (!confirm('Are you sure you want to delete your API token? This action cannot be undone.')) {
+  const confirmed = await customConfirm('Are you sure you want to delete your API token? This action cannot be undone.', 'Delete API Token');
+  if (!confirmed) {
     return;
   }
   
-  const password = prompt('Enter your password to delete API token:');
+  const password = await customPrompt('Enter your password to delete API token:', 'Delete API Token');
   
   if (!password) {
     return;
@@ -958,7 +1064,11 @@ async function deleteApiToken() {
 
 // Copy API token to clipboard
 function copyApiToken() {
-  const apiKeyValue = document.getElementById('apiKeyValue').textContent;
+  const apiKeyValue = document.getElementById('apiKeyValue').value;
+  if (!apiKeyValue) {
+    showAlert('userSettingsAlert', 'No API token to copy', 'error');
+    return;
+  }
   navigator.clipboard.writeText(apiKeyValue).then(() => {
     showAlert('userSettingsAlert', 'API token copied to clipboard', 'success');
   }).catch(() => {
@@ -968,10 +1078,22 @@ function copyApiToken() {
 
 // ========== ADMIN USER MANAGEMENT FUNCTIONS ==========
 
+// Generate random password
+function generateRandomPassword() {
+  const length = 16;
+  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+  let password = "";
+  for (let i = 0; i < length; i++) {
+    password += charset.charAt(Math.floor(Math.random() * charset.length));
+  }
+  document.getElementById('newUserPassword').value = password;
+}
+
 // Open user management modal
 function openUserManagement() {
   document.getElementById('userManagementModal').classList.add('active');
   loadUsers();
+  generateRandomPassword(); // Generate initial password
 }
 
 function closeUserManagement() {
@@ -1007,10 +1129,16 @@ function renderUserList(users) {
       <td>${user.hasApiKey ? '✅ Yes' : '❌ No'}</td>
       <td>${new Date(user.createdAt).toLocaleDateString()}</td>
       <td>
-        <button class="btn btn-danger btn-sm" onclick="deleteUser('${user.username}')" 
-                ${user.username === currentUser.username ? 'disabled title="Cannot delete yourself"' : ''}>
-          Delete
-        </button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary btn-sm" onclick="resetUserPassword('${user.username}')" 
+                  ${user.username === currentUser.username ? 'disabled title="Cannot reset your own password"' : ''}>
+            🔄 Reset Password
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="deleteUser('${user.username}')" 
+                  ${user.username === currentUser.username ? 'disabled title="Cannot delete yourself"' : ''}>
+            🗑️ Delete
+          </button>
+        </div>
       </td>
     </tr>
   `).join('');
@@ -1019,6 +1147,7 @@ function renderUserList(users) {
 // Create new user (admin only)
 async function createUser() {
   const username = document.getElementById('newUsername').value.trim();
+  const password = document.getElementById('newUserPassword').value.trim();
   const role = document.getElementById('newUserRole').value;
   
   if (!username) {
@@ -1026,8 +1155,22 @@ async function createUser() {
     return;
   }
   
-  if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
-    showAlert('userMgmtAlert', 'Username can only contain letters, numbers, hyphens, and underscores', 'error');
+  // Allow simple usernames (letters, numbers, hyphens, underscores) or valid email addresses
+  const simpleUsernamePattern = /^[a-zA-Z0-9_-]+$/;
+  const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  
+  if (!simpleUsernamePattern.test(username) && !emailPattern.test(username)) {
+    showAlert('userMgmtAlert', 'Username must be alphanumeric (with hyphens/underscores) or a valid email address', 'error');
+    return;
+  }
+  
+  if (!password) {
+    showAlert('userMgmtAlert', 'Password is required', 'error');
+    return;
+  }
+  
+  if (password.length < 8) {
+    showAlert('userMgmtAlert', 'Password must be at least 8 characters long', 'error');
     return;
   }
   
@@ -1035,17 +1178,19 @@ async function createUser() {
     const response = await fetch('/api/admin/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, role }),
+      body: JSON.stringify({ username, role, password }),
       credentials: 'include'
     });
     
     const data = await response.json();
     
     if (response.ok) {
-      showAlert('userMgmtAlert', `User created successfully. Password: ${data.user.password}`, 'success');
-      alert(`User created successfully!\n\nUsername: ${data.user.username}\nPassword: ${data.user.password}\nRole: ${data.user.role}\n\nPlease save this password securely. It won't be shown again.`);
+      showAlert('userMgmtAlert', 'User created successfully!', 'success');
+      await customAlert(`User created successfully!\n\nUsername: ${data.user.username}\nPassword: ${password}\nRole: ${data.user.role}\n\nPlease save this password securely. It won't be shown again.`, 'User Created');
       document.getElementById('newUsername').value = '';
+      document.getElementById('newUserPassword').value = '';
       document.getElementById('newUserRole').value = 'user';
+      generateRandomPassword(); // Generate new password for next user
       loadUsers();
     } else {
       showAlert('userMgmtAlert', data.error || 'Failed to create user', 'error');
@@ -1055,9 +1200,37 @@ async function createUser() {
   }
 }
 
+// Reset user password (admin only)
+async function resetUserPassword(username) {
+  const confirmed = await customConfirm(`Are you sure you want to reset password for user "${username}"?\n\nA new random password will be generated.`, 'Reset User Password');
+  if (!confirmed) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/admin/users/${username}/reset-password`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showAlert('userMgmtAlert', 'Password reset successfully', 'success');
+      await customAlert(`Password reset successfully for user "${username}"!\n\nNew Password: ${data.newPassword}\n\nPlease save this password securely and share it with the user. It won't be shown again.`, 'Password Reset');
+      loadUsers();
+    } else {
+      showAlert('userMgmtAlert', data.error || 'Failed to reset password', 'error');
+    }
+  } catch (error) {
+    showAlert('userMgmtAlert', 'Failed to reset password', 'error');
+  }
+}
+
 // Delete user (admin only)
 async function deleteUser(username) {
-  if (!confirm(`Are you sure you want to delete user "${username}"?`)) {
+  const confirmed = await customConfirm(`Are you sure you want to delete user "${username}"?`, 'Confirm User Deletion');
+  if (!confirmed) {
     return;
   }
   

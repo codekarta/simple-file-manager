@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Documentation - File Manager</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      /* Modern Color Palette */
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --secondary: #64748b;
+      --success: #059669;
+      --danger: #dc2626;
+      --warning: #f59e0b;
+      
+      /* Neutral Colors */
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      
+      /* Semantic Colors */
+      --bg: #f9fafb;
+      --surface: #ffffff;
+      --border: #e5e7eb;
+      --text: #111827;
+      --text-secondary: #6b7280;
+      
+      /* Shadows */
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      
+      /* Spacing */
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 12px;
+      --spacing-lg: 16px;
+      --spacing-xl: 24px;
+      
+      /* Border Radius */
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      
+      /* Transitions */
+      --transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Header */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 var(--spacing-xl);
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .header h1:hover {
+      color: var(--primary);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--spacing-sm);
+      padding: 8px 14px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+      text-decoration: none;
+      line-height: 1.5;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+    }
+
+    /* Main Content */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: var(--spacing-xl);
+    }
+
+    .docs-content {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: var(--spacing-xl);
+    }
+
+    /* Typography */
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: var(--spacing-lg);
+      color: var(--text);
+    }
+
+    h2 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-top: 40px;
+      margin-bottom: var(--spacing-lg);
+      color: var(--text);
+      padding-bottom: var(--spacing-sm);
+      border-bottom: 2px solid var(--border);
+    }
+
+    h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-top: 30px;
+      margin-bottom: var(--spacing-md);
+      color: var(--text);
+    }
+
+    h4 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 20px;
+      margin-bottom: var(--spacing-sm);
+      color: var(--text);
+    }
+
+    p {
+      margin-bottom: var(--spacing-md);
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    ul, ol {
+      margin-bottom: var(--spacing-md);
+      padding-left: 24px;
+    }
+
+    li {
+      margin-bottom: var(--spacing-sm);
+      color: var(--text-secondary);
+    }
+
+    /* Code Blocks */
+    code {
+      background: var(--gray-100);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      color: var(--danger);
+    }
+
+    pre {
+      background: var(--gray-900);
+      color: #e5e7eb;
+      padding: var(--spacing-lg);
+      border-radius: var(--radius-md);
+      overflow-x: auto;
+      margin-bottom: var(--spacing-lg);
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: var(--spacing-lg);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    thead {
+      background: var(--gray-50);
+    }
+
+    th {
+      padding: 12px var(--spacing-lg);
+      text-align: left;
+      font-weight: 600;
+      color: var(--gray-700);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 2px solid var(--border);
+    }
+
+    td {
+      padding: 12px var(--spacing-lg);
+      border-bottom: 1px solid var(--gray-100);
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-get {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .badge-post {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .badge-delete {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .badge-put {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    /* Alert Boxes */
+    .alert {
+      padding: var(--spacing-lg);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--spacing-lg);
+      border-left: 4px solid;
+    }
+
+    .alert-info {
+      background: #eff6ff;
+      border-color: var(--primary);
+      color: #1e40af;
+    }
+
+    .alert-warning {
+      background: #fef3c7;
+      border-color: var(--warning);
+      color: #92400e;
+    }
+
+    .alert-success {
+      background: #d1fae5;
+      border-color: var(--success);
+      color: #065f46;
+    }
+
+    .alert strong {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    /* Endpoint Box */
+    .endpoint {
+      background: var(--gray-50);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: var(--spacing-lg);
+      margin-bottom: var(--spacing-xl);
+    }
+
+    .endpoint-header {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-md);
+      margin-bottom: var(--spacing-md);
+    }
+
+    .endpoint-path {
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .endpoint-description {
+      color: var(--text-secondary);
+      margin-bottom: var(--spacing-md);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container {
+        padding: var(--spacing-md);
+      }
+
+      .docs-content {
+        padding: var(--spacing-lg);
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      h2 {
+        font-size: 20px;
+      }
+
+      h3 {
+        font-size: 16px;
+      }
+
+      pre {
+        font-size: 12px;
+        padding: var(--spacing-md);
+      }
+
+      table {
+        font-size: 12px;
+      }
+
+      th, td {
+        padding: 8px;
+      }
+    }
+
+    /* Table of Contents */
+    .toc {
+      background: var(--gray-50);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: var(--spacing-lg);
+      margin-bottom: var(--spacing-xl);
+    }
+
+    .toc h3 {
+      margin-top: 0;
+      margin-bottom: var(--spacing-md);
+    }
+
+    .toc ul {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .toc li {
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .toc a {
+      color: var(--primary);
+      text-decoration: none;
+      transition: var(--transition);
+    }
+
+    .toc a:hover {
+      color: var(--primary-hover);
+      text-decoration: underline;
+    }
+
+    .toc ul ul {
+      padding-left: 20px;
+      margin-top: var(--spacing-sm);
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1 onclick="window.location.href='/admin'">📁 File Manager</h1>
+    <a href="/admin" class="btn btn-primary">← Back to File Manager</a>
+  </div>
+
+  <!-- Main Content -->
+  <div class="container">
+    <div class="docs-content">
+      <h1>📖 API Documentation</h1>
+      <p>Complete guide for programmatic access to the File Manager API. This API allows you to integrate file management into your applications, scripts, and automation workflows.</p>
+
+      <!-- Table of Contents -->
+      <div class="toc">
+        <h3>📑 Table of Contents</h3>
+        <ul>
+          <li><a href="#authentication">Authentication</a>
+            <ul>
+              <li><a href="#session-auth">Session-Based Authentication</a></li>
+              <li><a href="#token-auth">API Token Authentication</a></li>
+            </ul>
+          </li>
+          <li><a href="#auth-endpoints">Authentication Endpoints</a></li>
+          <li><a href="#file-endpoints">File & Folder Operations</a></li>
+          <li><a href="#user-endpoints">User Management</a></li>
+          <li><a href="#admin-endpoints">Admin Endpoints</a></li>
+          <li><a href="#search-endpoints">Search & Storage</a></li>
+          <li><a href="#examples">Complete Examples</a></li>
+          <li><a href="#errors">Error Responses</a></li>
+          <li><a href="#best-practices">Best Practices</a></li>
+        </ul>
+      </div>
+
+      <!-- Authentication -->
+      <h2 id="authentication">🔐 Authentication</h2>
+      <p>All API endpoints (except public file access) require authentication. The API supports two authentication methods:</p>
+
+      <h3 id="session-auth">Method 1: Session-Based Authentication</h3>
+      <p>Use this method for web-based interactions or when you need temporary access.</p>
+
+      <h4>Step 1: Login to Get Session Cookie</h4>
+      <pre><code>curl -c cookies.txt -X POST http://localhost:3000/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'</code></pre>
+
+      <p><strong>Response:</strong></p>
+      <pre><code>{
+  "success": true,
+  "message": "Login successful"
+}</code></pre>
+
+      <h4>Step 2: Use Session Cookie for API Calls</h4>
+      <pre><code>curl -b cookies.txt "http://localhost:3000/api/files"</code></pre>
+
+      <h3 id="token-auth">Method 2: API Token Authentication (Recommended)</h3>
+      <p>Use this method for scripts, automation, CI/CD pipelines, or long-running processes.</p>
+
+      <h4>Generate Your API Token</h4>
+      <p><strong>Via Web Interface:</strong></p>
+      <ol>
+        <li>Login to the admin panel</li>
+        <li>Click "⚙️ Settings"</li>
+        <li>Scroll to API Token section</li>
+        <li>Click "🔑 Generate New Token"</li>
+        <li>Enter your password</li>
+        <li>Save the token securely!</li>
+      </ol>
+
+      <p><strong>Via API:</strong></p>
+      <pre><code>curl -b cookies.txt -X POST http://localhost:3000/api/user/generate-token \
+  -H "Content-Type: application/json" \
+  -d '{"password":"your_password"}'</code></pre>
+
+      <p><strong>Response:</strong></p>
+      <pre><code>{
+  "success": true,
+  "message": "API token generated successfully",
+  "apiKey": "yknngagbkwqyga86qxeus5qd"
+}</code></pre>
+
+      <h4>Use API Token</h4>
+      <p><strong>Option A: Bearer Token (Recommended)</strong></p>
+      <pre><code>curl -H "Authorization: Bearer YOUR_API_TOKEN" \
+  http://localhost:3000/api/files</code></pre>
+
+      <p><strong>Option B: URL Parameter</strong></p>
+      <pre><code>curl "http://localhost:3000/api/files?apiKey=YOUR_API_TOKEN"</code></pre>
+
+      <div class="alert alert-success">
+        <strong>✅ Advantages of API Tokens:</strong>
+        <ul>
+          <li>No need to handle sessions or cookies</li>
+          <li>Perfect for automation scripts</li>
+          <li>No expiration (until manually deleted)</li>
+          <li>Can be revoked anytime without changing password</li>
+          <li>Each user has their own token</li>
+        </ul>
+      </div>
+
+      <!-- Authentication Endpoints -->
+      <h2 id="auth-endpoints">🔑 Authentication Endpoints</h2>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/login</span>
+        </div>
+        <p class="endpoint-description">Authenticate user and create session</p>
+        <p><strong>Request Body:</strong></p>
+        <pre><code>{
+  "username": "admin",
+  "password": "your_password"
+}</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "success": true,
+  "message": "Login successful"
+}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/logout</span>
+        </div>
+        <p class="endpoint-description">End current session</p>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "success": true,
+  "message": "Logged out successfully"
+}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-get">GET</span>
+          <span class="endpoint-path">/api/auth/status</span>
+        </div>
+        <p class="endpoint-description">Check authentication status</p>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "authenticated": true,
+  "username": "admin"
+}</code></pre>
+      </div>
+
+      <!-- File & Folder Operations -->
+      <h2 id="file-endpoints">📁 File & Folder Operations</h2>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-get">GET</span>
+          <span class="endpoint-path">/api/files?path={folder_path}</span>
+        </div>
+        <p class="endpoint-description">List files and folders in a directory</p>
+        <p><strong>Example:</strong></p>
+        <pre><code># List root directory
+curl -b cookies.txt "http://localhost:3000/api/files"
+
+# List specific folder
+curl -b cookies.txt "http://localhost:3000/api/files?path=products"
+
+# With API token
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  "http://localhost:3000/api/files?path=products"</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "currentPath": "products",
+  "items": [
+    {
+      "name": "tshirt.jpg",
+      "path": "products/tshirt.jpg",
+      "isDirectory": false,
+      "size": 245678,
+      "modified": "2024-10-09T10:30:00.000Z",
+      "created": "2024-10-08T14:20:00.000Z"
+    }
+  ]
+}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/upload</span>
+        </div>
+        <p class="endpoint-description">Upload one or more files</p>
+        <p><strong>Example - Single file:</strong></p>
+        <pre><code>curl -b cookies.txt -X POST http://localhost:3000/api/upload \
+  -F "basePath=products" \
+  -F "files=@/path/to/image.jpg"</code></pre>
+        <p><strong>Example - Multiple files:</strong></p>
+        <pre><code>curl -b cookies.txt -X POST http://localhost:3000/api/upload \
+  -F "basePath=products" \
+  -F "files=@image1.jpg" \
+  -F "files=@image2.jpg" \
+  -F "files=@image3.jpg"</code></pre>
+        <p><strong>With API token:</strong></p>
+        <pre><code>curl -H "Authorization: Bearer YOUR_TOKEN" \
+  -X POST http://localhost:3000/api/upload \
+  -F "basePath=products" \
+  -F "files=@image.jpg"</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/folder</span>
+        </div>
+        <p class="endpoint-description">Create a new folder</p>
+        <p><strong>Request Body:</strong></p>
+        <pre><code>{
+  "path": "products",
+  "name": "new-folder"
+}</code></pre>
+        <p><strong>Example:</strong></p>
+        <pre><code>curl -b cookies.txt -X POST http://localhost:3000/api/folder \
+  -H "Content-Type: application/json" \
+  -d '{"path":"","name":"documents"}'</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-delete">DELETE</span>
+          <span class="endpoint-path">/api/delete</span>
+        </div>
+        <p class="endpoint-description">Delete a file or folder (recursive)</p>
+        <p><strong>Request Body:</strong></p>
+        <pre><code>{
+  "path": "products/old-image.jpg"
+}</code></pre>
+        <p><strong>Example:</strong></p>
+        <pre><code>curl -b cookies.txt -X DELETE http://localhost:3000/api/delete \
+  -H "Content-Type: application/json" \
+  -d '{"path":"products/old-image.jpg"}'</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/rename</span>
+        </div>
+        <p class="endpoint-description">Rename a file or folder</p>
+        <p><strong>Request Body:</strong></p>
+        <pre><code>{
+  "path": "products/old-name.jpg",
+  "newName": "new-name.jpg"
+}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-get">GET</span>
+          <span class="endpoint-path">/api/download?path={file_path}</span>
+        </div>
+        <p class="endpoint-description">Download a file</p>
+        <p><strong>Example:</strong></p>
+        <pre><code>curl -b cookies.txt "http://localhost:3000/api/download?path=products/image.jpg" \
+  -o downloaded-image.jpg</code></pre>
+      </div>
+
+      <!-- User Management -->
+      <h2 id="user-endpoints">👤 User Management Endpoints</h2>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-get">GET</span>
+          <span class="endpoint-path">/api/user/me</span>
+        </div>
+        <p class="endpoint-description">Get current user information</p>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "success": true,
+  "user": {
+    "username": "john",
+    "role": "user",
+    "hasApiKey": true,
+    "apiKey": "yknngagbkwqyga86qxeus5qd",
+    "createdAt": "2025-01-15T10:00:00.000Z"
+  }
+}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/user/change-password</span>
+        </div>
+        <p class="endpoint-description">Change your password</p>
+        <p><strong>Request Body:</strong></p>
+        <pre><code>{
+  "oldPassword": "current_password",
+  "newPassword": "new_password_min_8_chars"
+}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/user/generate-token</span>
+        </div>
+        <p class="endpoint-description">Generate a new API token</p>
+        <p><strong>Request Body:</strong></p>
+        <pre><code>{
+  "password": "your_password"
+}</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "success": true,
+  "message": "API token generated successfully",
+  "apiKey": "yknngagbkwqyga86qxeus5qd"
+}</code></pre>
+        <div class="alert alert-warning">
+          <strong>⚠️ Important:</strong> Save this API token securely. Treat it like a password!
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-delete">DELETE</span>
+          <span class="endpoint-path">/api/user/delete-token</span>
+        </div>
+        <p class="endpoint-description">Delete your API token</p>
+        <p><strong>Request Body:</strong></p>
+        <pre><code>{
+  "password": "your_password"
+}</code></pre>
+      </div>
+
+      <!-- Admin Endpoints -->
+      <h2 id="admin-endpoints">👮 Admin Endpoints</h2>
+      <p>These endpoints require admin role.</p>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-get">GET</span>
+          <span class="endpoint-path">/api/admin/users</span>
+        </div>
+        <p class="endpoint-description">List all users (admin only)</p>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "success": true,
+  "users": [
+    {
+      "username": "admin",
+      "role": "admin",
+      "hasApiKey": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "username": "john",
+      "role": "user",
+      "hasApiKey": false,
+      "createdAt": "2025-01-15T10:00:00.000Z"
+    }
+  ]
+}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/admin/users</span>
+        </div>
+        <p class="endpoint-description">Create a new user (admin only)</p>
+        <p><strong>Request Body:</strong></p>
+        <pre><code>{
+  "username": "newuser",
+  "role": "user"
+}</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "success": true,
+  "message": "User created successfully",
+  "user": {
+    "username": "newuser",
+    "password": "randomly_generated_password_123",
+    "role": "user"
+  }
+}</code></pre>
+        <div class="alert alert-warning">
+          <strong>⚠️ Important:</strong> The password is only shown once. Save it securely!
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-delete">DELETE</span>
+          <span class="endpoint-path">/api/admin/users/{username}</span>
+        </div>
+        <p class="endpoint-description">Delete a user (admin only)</p>
+        <p><strong>Example:</strong></p>
+        <pre><code>curl -b cookies.txt -X DELETE http://localhost:3000/api/admin/users/olduser
+
+# Or with API token
+curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -X DELETE http://localhost:3000/api/admin/users/olduser</code></pre>
+        <p><strong>Note:</strong> Admins cannot delete their own account.</p>
+      </div>
+
+      <!-- Search & Storage -->
+      <h2 id="search-endpoints">🔍 Search & Storage</h2>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-get">GET</span>
+          <span class="endpoint-path">/api/search?q={query}</span>
+        </div>
+        <p class="endpoint-description">Search for files and folders</p>
+        <p><strong>Example:</strong></p>
+        <pre><code>curl -b cookies.txt "http://localhost:3000/api/search?q=tshirt"</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-get">GET</span>
+          <span class="endpoint-path">/api/storage</span>
+        </div>
+        <p class="endpoint-description">Get storage statistics</p>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "totalSize": 15728640,
+  "fileCount": 42,
+  "folderCount": 8
+}</code></pre>
+      </div>
+
+      <!-- Examples -->
+      <h2 id="examples">💡 Complete Examples</h2>
+
+      <h3>Example 1: Upload Product Images (Bash)</h3>
+      <pre><code>#!/bin/bash
+
+# Step 1: Login
+curl -c cookies.txt -X POST http://localhost:3000/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+
+# Step 2: Create products folder
+curl -b cookies.txt -X POST http://localhost:3000/api/folder \
+  -H "Content-Type: application/json" \
+  -d '{"path":"","name":"products"}'
+
+# Step 3: Upload images
+curl -b cookies.txt -X POST http://localhost:3000/api/upload \
+  -F "basePath=products" \
+  -F "files=@./tshirt-red.jpg" \
+  -F "files=@./tshirt-blue.jpg" \
+  -F "files=@./tshirt-green.jpg"
+
+echo "Files are now accessible at:"
+echo "http://localhost:3000/products/tshirt-red.jpg"</code></pre>
+
+      <h3>Example 2: Using API Tokens (Python)</h3>
+      <pre><code>import requests
+
+BASE_URL = "http://localhost:3000"
+API_TOKEN = "yknngagbkwqyga86qxeus5qd"
+
+# Set up headers with API token
+headers = {
+    "Authorization": f"Bearer {API_TOKEN}"
+}
+
+# List files
+response = requests.get(f"{BASE_URL}/api/files", headers=headers)
+files = response.json()
+
+print(f"Found {len(files['items'])} items:")
+for item in files['items']:
+    icon = "📁" if item['isDirectory'] else "📄"
+    print(f"  {icon} {item['name']}")
+
+# Upload file
+with open('example.txt', 'rb') as f:
+    files_data = {'files': f}
+    data = {'basePath': ''}
+    response = requests.post(
+        f"{BASE_URL}/api/upload",
+        files=files_data,
+        data=data,
+        headers=headers
+    )
+    print(f"\n✓ Upload: {response.json()['message']}")</code></pre>
+
+      <h3>Example 3: Node.js with API Token</h3>
+      <pre><code>const axios = require('axios');
+const FormData = require('form-data');
+const fs = require('fs');
+
+const BASE_URL = 'http://localhost:3000';
+const API_TOKEN = 'yknngagbkwqyga86qxeus5qd';
+
+const api = axios.create({
+  baseURL: BASE_URL,
+  headers: {
+    'Authorization': `Bearer ${API_TOKEN}`
+  }
+});
+
+async function main() {
+  try {
+    // List files
+    const files = await api.get('/api/files');
+    console.log(`Found ${files.data.items.length} items`);
+
+    // Create folder
+    await api.post('/api/folder', {
+      path: '',
+      name: 'test-folder',
+    });
+    console.log('✓ Created folder: test-folder');
+
+    // Upload file
+    const formData = new FormData();
+    formData.append('basePath', 'test-folder');
+    formData.append('files', fs.createReadStream('./test.txt'));
+
+    await api.post('/api/upload', formData, {
+      headers: formData.getHeaders(),
+    });
+    console.log('✓ Uploaded file');
+  } catch (error) {
+    console.error('Error:', error.response?.data || error.message);
+  }
+}
+
+main();</code></pre>
+
+      <!-- Error Responses -->
+      <h2 id="errors">⚠️ Error Responses</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Status Code</th>
+            <th>Error Type</th>
+            <th>Example Response</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>401</td>
+            <td>Unauthorized</td>
+            <td><code>{"error": "Authentication required"}</code></td>
+          </tr>
+          <tr>
+            <td>403</td>
+            <td>Forbidden</td>
+            <td><code>{"error": "Access denied"}</code></td>
+          </tr>
+          <tr>
+            <td>404</td>
+            <td>Not Found</td>
+            <td><code>{"error": "File or folder not found"}</code></td>
+          </tr>
+          <tr>
+            <td>400</td>
+            <td>Bad Request</td>
+            <td><code>{"error": "Invalid input"}</code></td>
+          </tr>
+          <tr>
+            <td>500</td>
+            <td>Server Error</td>
+            <td><code>{"error": "Internal server error"}</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Best Practices -->
+      <h2 id="best-practices">✨ Best Practices</h2>
+
+      <h3>Security</h3>
+      <ul>
+        <li><strong>Use HTTPS in production</strong> - Never send credentials over HTTP</li>
+        <li><strong>Store API tokens securely</strong> - Use environment variables, never hardcode</li>
+        <li><strong>Rotate tokens regularly</strong> - Generate new tokens periodically</li>
+        <li><strong>Revoke unused tokens</strong> - Delete tokens that are no longer needed</li>
+        <li><strong>Use separate tokens</strong> - Different tokens for different applications</li>
+      </ul>
+
+      <h3>Performance</h3>
+      <ul>
+        <li><strong>Reuse connections</strong> - Keep sessions alive for multiple requests</li>
+        <li><strong>Handle timeouts</strong> - Set appropriate timeouts for large file uploads</li>
+        <li><strong>Batch operations</strong> - Upload multiple files in one request when possible</li>
+        <li><strong>Check file sizes</strong> - Validate before uploading (max 100MB per file)</li>
+      </ul>
+
+      <h3>Error Handling</h3>
+      <ul>
+        <li><strong>Check status codes</strong> - Always verify response status</li>
+        <li><strong>Implement retries</strong> - Retry failed requests with exponential backoff</li>
+        <li><strong>Log errors</strong> - Keep detailed logs for debugging</li>
+        <li><strong>Validate inputs</strong> - Check file paths and names before operations</li>
+      </ul>
+
+      <div class="alert alert-info">
+        <strong>💡 Need Help?</strong>
+        <p>If you encounter any issues or have questions, please refer to the troubleshooting section in the main documentation or contact support.</p>
+      </div>
+
+      <hr style="margin: 40px 0; border: none; border-top: 1px solid var(--border);">
+
+      <p style="text-align: center; color: var(--text-secondary);">
+        <strong>Made with ❤️ for easy file management</strong><br>
+        Powered by <a href="https://github.com/manishbansal8843/simple-file-manage" target="_blank" style="color: var(--primary); text-decoration: none;">Simple File Manager</a> | Licensed under MIT License<br>
+        <a href="/admin" style="color: var(--primary); text-decoration: none;">← Back to File Manager</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+

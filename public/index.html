@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>File Manager</title>
+  <title>SFM - Simple File Manager</title>
   <style>
     * {
       margin: 0;
@@ -392,11 +392,18 @@
 
     /* Search Box */
     .search-box {
-      position: relative;
+      display: flex;
+      gap: 8px;
+      align-items: center;
       min-width: 200px;
     }
 
-    .search-box input {
+    .search-input-wrapper {
+      position: relative;
+      flex: 1;
+    }
+
+    .search-input-wrapper input {
       width: 100%;
       padding: 8px 12px 8px 32px;
       border: 1px solid var(--border);
@@ -406,10 +413,33 @@
       background: var(--surface);
     }
 
-    .search-box input:focus {
+    .search-input-wrapper input:focus {
       outline: none;
       border-color: var(--primary);
       box-shadow: 0 0 0 3px var(--primary-light);
+    }
+    
+    .regex-toggle {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: var(--transition);
+      white-space: nowrap;
+      user-select: none;
+    }
+    
+    .regex-toggle:hover {
+      background: var(--gray-100);
+    }
+    
+    .regex-toggle.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
     }
 
     .search-icon {
@@ -862,7 +892,7 @@
   <!-- Login Screen -->
   <div id="loginContainer" class="login-container">
     <div class="login-box">
-      <h1>📁 File Manager</h1>
+      <h1>📁 Simple File Manager</h1>
       <p>Sign in to manage your files</p>
       
       <div id="loginAlert" class="alert alert-error"></div>
@@ -890,7 +920,7 @@
     <!-- Compact Header -->
     <div class="header">
       <div class="header-left">
-        <h1>📁 File Manager</h1>
+        <h1>📁 Simple File Manager</h1>
         <div class="storage-info">
           <div class="storage-stat">
             <span class="storage-stat-value" id="totalSize">-</span>
@@ -910,6 +940,7 @@
         <span class="user-info">
           👤 <span id="currentUser"></span>
         </span>
+        <a href="/api-docs" class="btn btn-secondary btn-sm" style="text-decoration: none;">📖 API Docs</a>
         <button class="btn btn-secondary btn-sm" onclick="openUserSettings()">⚙️ Settings</button>
         <button class="btn btn-secondary btn-sm admin-only" onclick="openUserManagement()" style="display: none;">👥 Users</button>
         <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
@@ -937,8 +968,13 @@
       </div>
       <div class="toolbar-right">
         <div class="search-box">
-          <span class="search-icon">🔍</span>
-          <input type="text" id="searchInput" placeholder="Search files..." onkeyup="handleSearch(event)">
+          <div class="search-input-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="searchInput" placeholder="Search files..." onkeyup="handleSearch(event)">
+          </div>
+          <button class="regex-toggle" id="regexToggle" onclick="toggleRegex()" title="Enable/Disable Regular Expression">
+            .*  Regex
+          </button>
         </div>
       </div>
     </div>
@@ -979,6 +1015,17 @@
           <p>Upload your first file to get started</p>
         </div>
       </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding: 12px 20px; text-align: center; font-size: 11px; color: var(--gray-400); border-top: 1px solid var(--border); background: var(--white); line-height: 1.5;">
+      Powered by <a href="https://github.com/codekarta/simple-file-manager" target="_blank" style="color: var(--primary); text-decoration: none;">Simple File Manager</a> | 
+      <a href="https://github.com/codekarta/simple-file-manager" target="_blank" style="color: var(--gray-400); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; vertical-align: middle;">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+        </svg>
+        GitHub
+      </a> | Licensed under MIT License
     </div>
   </div>
 
@@ -1088,10 +1135,10 @@
           ⚠️ You don't have an API token yet.
         </div>
         
-        <div id="apiKeyDisplay" style="display: none; margin-bottom: 12px;">
+        <div style="margin-bottom: 12px;">
           <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 13px;">Your API Token:</label>
           <div style="display: flex; gap: 8px;">
-            <input type="text" id="apiKeyValue" readonly style="flex: 1; font-family: monospace; font-size: 12px; background: var(--gray-100);">
+            <input type="text" id="apiKeyValue" readonly placeholder="No token generated yet" style="flex: 1; font-family: monospace; font-size: 12px; background: var(--gray-100);">
             <button class="btn btn-secondary" onclick="copyApiToken()">📋 Copy</button>
           </div>
           <p style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
@@ -1124,25 +1171,35 @@
       <div style="margin-bottom: 24px; padding: 16px; background: var(--gray-50); border-radius: var(--radius-md);">
         <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Create New User</h3>
         
-        <div style="display: flex; gap: 12px; align-items: flex-end;">
-          <div class="form-group" style="flex: 1; margin-bottom: 0;">
-            <label for="newUsername">Username</label>
-            <input type="text" id="newUsername" placeholder="Enter username">
+        <div style="display: grid; gap: 12px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 150px auto; gap: 12px; align-items: end;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="newUsername">Username or Email</label>
+              <input type="text" id="newUsername" placeholder="Enter username or email">
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="newUserPassword">Password</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="newUserPassword" placeholder="Auto-generated password" style="flex: 1;">
+                <button type="button" class="btn btn-secondary" onclick="generateRandomPassword()" title="Generate new password" style="padding: 10px 12px;">🔄</button>
+              </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="newUserRole">Role</label>
+              <select id="newUserRole" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px;">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            
+            <button class="btn btn-primary" onclick="createUser()">Create User</button>
           </div>
-          
-          <div class="form-group" style="width: 150px; margin-bottom: 0;">
-            <label for="newUserRole">Role</label>
-            <select id="newUserRole" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px;">
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          
-          <button class="btn btn-primary" onclick="createUser()">Create User</button>
         </div>
         
         <p style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);">
-          A random password will be generated and displayed once. Make sure to save it.
+          💡 A random password is auto-generated. You can keep it or enter your own custom password.
         </p>
       </div>
       
@@ -1166,6 +1223,50 @@
       
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeUserManagement()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Dialog Modals -->
+  <div id="customAlertModal" class="modal">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h2 id="customAlertTitle">Alert</h2>
+      </div>
+      <div id="customAlertMessage" style="padding: 20px; line-height: 1.6; white-space: pre-wrap;">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeCustomAlert()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="customConfirmModal" class="modal">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h2 id="customConfirmTitle">Confirm</h2>
+      </div>
+      <div id="customConfirmMessage" style="padding: 20px; line-height: 1.6;">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCustomConfirm(false)">Cancel</button>
+        <button class="btn btn-primary" onclick="closeCustomConfirm(true)">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="customPromptModal" class="modal">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h2 id="customPromptTitle">Input Required</h2>
+      </div>
+      <div style="padding: 20px;">
+        <p id="customPromptMessage" style="margin-bottom: 16px; line-height: 1.6;"></p>
+        <input type="password" id="customPromptInput" class="form-control" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px;">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCustomPrompt(null)">Cancel</button>
+        <button class="btn btn-primary" onclick="closeCustomPrompt(document.getElementById('customPromptInput').value)">OK</button>
       </div>
     </div>
   </div>

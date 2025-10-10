@@ -77,7 +77,7 @@ async function hashPassword(plainPassword) {
 }
 
 // Create new user (admin only)
-async function createUser(username, role = 'user') {
+async function createUser(username, role = 'user', customPassword = null) {
     const credentials = await readCredentials();
     
     // Check if user already exists
@@ -85,9 +85,15 @@ async function createUser(username, role = 'user') {
         throw new Error('User already exists');
     }
     
-    // Generate random password
-    const randomPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12);
-    const hashedPassword = await hashPassword(randomPassword);
+    // Use custom password if provided, otherwise generate random
+    let plainPassword;
+    if (customPassword) {
+        plainPassword = customPassword;
+    } else {
+        plainPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12);
+    }
+    
+    const hashedPassword = await hashPassword(plainPassword);
     
     const newUser = {
         username,
@@ -102,9 +108,33 @@ async function createUser(username, role = 'user') {
     
     return {
         username,
-        password: randomPassword, // Return plain password only once
+        password: plainPassword, // Return plain password only once
         role
     };
+}
+
+// Reset user password (admin only, cannot reset self)
+async function resetUserPassword(username, adminUsername) {
+    const credentials = await readCredentials();
+    
+    if (username === adminUsername) {
+        throw new Error('Cannot reset your own password');
+    }
+    
+    const user = credentials.users.find(u => u.username === username);
+    if (!user) {
+        throw new Error('User not found');
+    }
+    
+    // Generate new random password
+    const newPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12);
+    user.password = await hashPassword(newPassword);
+    user.passwordResetAt = new Date().toISOString();
+    user.passwordResetBy = adminUsername;
+    
+    await writeCredentials(credentials);
+    
+    return newPassword; // Return plain password only once
 }
 
 // Delete user (admin only, cannot delete self)
@@ -232,6 +262,7 @@ export {
     verifyPassword,
     hashPassword,
     createUser,
+    resetUserPassword,
     deleteUser,
     changePassword,
     generateApiToken,
