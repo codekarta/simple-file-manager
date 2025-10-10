@@ -34,10 +34,14 @@ Simple File Manager is a web-based application that allows you to upload, organi
 ## Key Features
 
 ### 🔐 Security & Authentication
-- Password-protected admin panel
-- Session-based authentication
-- Secure file path validation
-- Directory traversal protection
+- **Multi-User System** - Support for multiple users with different roles (admin/user)
+- **Password Management** - Users can change their passwords securely
+- **API Token Authentication** - Generate personal API tokens for programmatic access
+- **Encrypted Passwords** - All passwords are hashed using bcrypt
+- **Session-based Authentication** - Secure cookie-based sessions
+- **Flexible API Authentication** - Use Bearer tokens or URL parameters
+- **Role-Based Access Control** - Admin-only endpoints for user management
+- **Secure file path validation** - Protection against directory traversal attacks
 
 ### 📁 File & Folder Management
 - **Upload Files** - Single or multiple files (up to 500 files)
@@ -68,11 +72,22 @@ Simple File Manager is a web-based application that allows you to upload, organi
 - Real-time statistics updates
 
 ### 🔌 RESTful API
-- Full API access to all file operations
-- Session-based authentication
-- List, upload, download, delete files and folders via API
-- Integration with scripts and applications (Python, Node.js, Bash, cURL)
-- Perfect for automation and CI/CD pipelines
+- **Full API access** to all file operations
+- **Dual Authentication** - Session-based or API token-based
+- **User Management API** - Create, delete users, manage passwords (admin only)
+- **API Token Management** - Generate and revoke personal API tokens
+- **List, upload, download, delete** files and folders via API
+- **Integration with scripts** and applications (Python, Node.js, Bash, cURL)
+- **Perfect for automation** and CI/CD pipelines
+
+### 👥 User Management
+- **Multi-User Support** - Admin can create and manage multiple users
+- **Auto-Generated Passwords** - Secure random passwords for new users
+- **Role Management** - Assign admin or user roles
+- **User Dashboard** - Each user can manage their own settings
+- **Password Change** - Users can update their passwords anytime
+- **API Token per User** - Each user can generate their own API token
+- **Self-Service** - Users manage their own API tokens and passwords
 
 ---
 
@@ -273,6 +288,47 @@ Result: http://yourdomain.com/my-website/css/style.css
 3. Confirm bulk deletion
 4. All selected items are removed
 
+### User Management (Admin Only)
+
+#### Creating Users
+1. Click **"👥 Users"** button (visible only to admins)
+2. Enter username (letters, numbers, hyphens, underscores only)
+3. Select role (User or Admin)
+4. Click **"Create User"**
+5. **Save the generated password** - it will only be shown once!
+
+#### Deleting Users
+1. Open **"👥 Users"** management panel
+2. Find the user in the list
+3. Click **"Delete"** button
+4. Confirm deletion
+5. Note: You cannot delete your own account
+
+### Password & API Token Management
+
+#### Changing Your Password
+1. Click **"⚙️ Settings"** button
+2. Enter your current password
+3. Enter new password (minimum 8 characters)
+4. Confirm new password
+5. Click **"Change Password"**
+
+#### Managing API Tokens
+1. Click **"⚙️ Settings"** button
+2. Scroll to API Token section
+3. To generate: Click **"🔑 Generate New Token"**, enter password
+4. **Save your API token securely** - treat it like a password!
+5. To delete: Click **"🗑️ Delete Token"**, confirm with password
+
+**API Token Usage:**
+```bash
+# Method 1: Bearer Token (Recommended)
+curl -H "Authorization: Bearer YOUR_TOKEN" http://yourdomain.com/api/files
+
+# Method 2: URL Parameter
+curl "http://yourdomain.com/api/files?apiKey=YOUR_TOKEN"
+```
+
 ### Accessing Files Publicly
 
 Once uploaded, any file can be accessed via its URL without authentication:
@@ -300,7 +356,11 @@ The File Manager provides a RESTful API for programmatic access to all file oper
 
 ### Authentication
 
-All API endpoints (except public file access) require authentication. The API uses session-based authentication.
+All API endpoints (except public file access) require authentication. The API supports **two authentication methods**:
+
+#### Method 1: Session-Based Authentication (Traditional)
+
+Use this method for web-based interactions or when you need temporary access.
 
 #### Step 1: Login to Get Session Cookie
 
@@ -323,6 +383,74 @@ The session cookie is saved in `cookies.txt` and must be included in all subsequ
 #### Step 2: Use Session Cookie for API Calls
 
 Include the cookie in all API requests using `-b cookies.txt` flag.
+
+---
+
+#### Method 2: API Token Authentication (Recommended for Automation)
+
+Use this method for scripts, automation, CI/CD pipelines, or long-running processes.
+
+##### Step 1: Generate Your API Token
+
+**Via Web Interface:**
+1. Login to the admin panel
+2. Click **"⚙️ Settings"**
+3. Scroll to API Token section
+4. Click **"🔑 Generate New Token"**
+5. Enter your password
+6. **Save the token securely!**
+
+**Via API:**
+```bash
+# First login to get session
+curl -c cookies.txt -X POST http://localhost:3000/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"your_username","password":"your_password"}'
+
+# Then generate API token
+curl -b cookies.txt -X POST http://localhost:3000/api/user/generate-token \
+  -H "Content-Type: application/json" \
+  -d '{"password":"your_password"}'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "API token generated successfully",
+  "apiKey": "yknngagbkwqyga86qxeus5qd"
+}
+```
+
+##### Step 2: Use API Token for API Calls
+
+You can use the API token in two ways:
+
+**Option A: Bearer Token (Recommended)**
+```bash
+curl -H "Authorization: Bearer YOUR_API_TOKEN" \
+  http://localhost:3000/api/files
+```
+
+**Option B: URL Parameter**
+```bash
+curl "http://localhost:3000/api/files?apiKey=YOUR_API_TOKEN"
+```
+
+**Advantages of API Tokens:**
+- ✅ No need to handle sessions or cookies
+- ✅ Perfect for automation scripts
+- ✅ No expiration (until manually deleted)
+- ✅ Can be revoked anytime without changing password
+- ✅ Each user has their own token
+- ✅ Works across all API endpoints
+
+**Security Best Practices:**
+- Never commit API tokens to version control
+- Store tokens in environment variables
+- Regenerate tokens if compromised
+- Use separate tokens for different applications
+- Delete unused tokens
 
 ---
 
@@ -376,6 +504,189 @@ Cookie: filemanager.sid=xxx
   "username": "admin"
 }
 ```
+
+---
+
+#### 👥 User Management Endpoints
+
+##### Get Current User Info
+```http
+GET /api/user/me
+Cookie: filemanager.sid=xxx
+OR
+Authorization: Bearer YOUR_API_TOKEN
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "user": {
+    "username": "john",
+    "role": "user",
+    "hasApiKey": true,
+    "apiKey": "yknngagbkwqyga86qxeus5qd",
+    "createdAt": "2025-01-15T10:00:00.000Z",
+    "passwordChangedAt": "2025-01-20T15:30:00.000Z",
+    "apiKeyGeneratedAt": "2025-01-22T09:00:00.000Z"
+  }
+}
+```
+
+##### Change Password
+```http
+POST /api/user/change-password
+Cookie: filemanager.sid=xxx
+OR
+Authorization: Bearer YOUR_API_TOKEN
+Content-Type: application/json
+
+{
+  "oldPassword": "current_password",
+  "newPassword": "new_password_min_8_chars"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Password changed successfully"
+}
+```
+
+##### Generate API Token
+```http
+POST /api/user/generate-token
+Cookie: filemanager.sid=xxx
+Content-Type: application/json
+
+{
+  "password": "your_password"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "API token generated successfully",
+  "apiKey": "yknngagbkwqyga86qxeus5qd"
+}
+```
+
+**Important:** Save this API token securely. Treat it like a password!
+
+##### Delete API Token
+```http
+DELETE /api/user/delete-token
+Cookie: filemanager.sid=xxx
+Content-Type: application/json
+
+{
+  "password": "your_password"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "API token deleted successfully"
+}
+```
+
+---
+
+#### 👮 Admin User Management Endpoints
+
+These endpoints require admin role.
+
+##### List All Users
+```http
+GET /api/admin/users
+Cookie: filemanager.sid=xxx (admin session required)
+OR
+Authorization: Bearer ADMIN_API_TOKEN
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "users": [
+    {
+      "username": "admin",
+      "role": "admin",
+      "hasApiKey": true,
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "passwordChangedAt": "2025-01-10T12:00:00.000Z"
+    },
+    {
+      "username": "john",
+      "role": "user",
+      "hasApiKey": false,
+      "createdAt": "2025-01-15T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+##### Create User
+```http
+POST /api/admin/users
+Cookie: filemanager.sid=xxx (admin session required)
+OR
+Authorization: Bearer ADMIN_API_TOKEN
+Content-Type: application/json
+
+{
+  "username": "newuser",
+  "role": "user"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "User created successfully",
+  "user": {
+    "username": "newuser",
+    "password": "randomly_generated_password_123",
+    "role": "user"
+  }
+}
+```
+
+**Important:** The password is only shown once. Save it securely!
+
+##### Delete User
+```http
+DELETE /api/admin/users/{username}
+Cookie: filemanager.sid=xxx (admin session required)
+OR
+Authorization: Bearer ADMIN_API_TOKEN
+```
+
+**Example:**
+```bash
+curl -b cookies.txt -X DELETE http://localhost:3000/api/admin/users/olduser
+
+# Or with API token
+curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -X DELETE http://localhost:3000/api/admin/users/olduser
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "User deleted successfully"
+}
+```
+
+**Note:** Admins cannot delete their own account.
 
 ---
 
@@ -1522,7 +1833,19 @@ No built-in rate limiting. Consider adding for production use.
 
 ## Changelog
 
-### Version 1.0.3 (Latest)
+### Version 2.0.0 (Latest)
+- 👥 **Multi-User System** - Support for multiple users with admin/user roles
+- 🔑 **API Token Authentication** - Generate personal API tokens for automation
+- 🔐 **Password Management** - Users can change their passwords securely
+- 🔒 **Encrypted Credentials** - All passwords hashed with bcrypt
+- 📝 **User Management UI** - Admin panel for creating and managing users
+- ⚙️ **User Settings Panel** - Self-service password and token management
+- 🚀 **Dual Authentication** - Session-based or API token-based access
+- 📊 **Role-Based Access Control** - Admin-only endpoints and features
+- ✨ **Auto-Generated Passwords** - Secure random passwords for new users
+- 📁 **credential.json** - Centralized user credential storage
+
+### Version 1.0.3
 - ✨ Added folder upload with complete directory structure
 - 🎨 Complete UI/UX overhaul with modern design
 - 📦 Support for up to 500 files per upload

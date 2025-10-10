@@ -204,6 +204,26 @@
       font-size: 12px;
     }
 
+    /* User Role Badge */
+    .user-role {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    
+    .user-role.admin {
+      background: var(--primary);
+      color: white;
+    }
+    
+    .user-role.user {
+      background: var(--gray-300);
+      color: var(--gray-700);
+    }
+
     .icon-btn {
       background: transparent;
       border: none;
@@ -890,6 +910,8 @@
         <span class="user-info">
           👤 <span id="currentUser"></span>
         </span>
+        <button class="btn btn-secondary btn-sm" onclick="openUserSettings()">⚙️ Settings</button>
+        <button class="btn btn-secondary btn-sm admin-only" onclick="openUserManagement()" style="display: none;">👥 Users</button>
         <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
       </div>
     </div>
@@ -1019,6 +1041,131 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeRenameModal()">Cancel</button>
         <button class="btn btn-primary" onclick="confirmRename()">Rename</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Settings Modal -->
+  <div id="userSettingsModal" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>⚙️ User Settings</h2>
+      </div>
+      
+      <div id="userSettingsAlert" class="alert"></div>
+      
+      <!-- Change Password Section -->
+      <div style="margin-bottom: 24px; padding: 16px; background: var(--gray-50); border-radius: var(--radius-md);">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Change Password</h3>
+        
+        <div class="form-group">
+          <label for="oldPassword">Current Password</label>
+          <input type="password" id="oldPassword" placeholder="Enter current password">
+        </div>
+        
+        <div class="form-group">
+          <label for="newPassword">New Password</label>
+          <input type="password" id="newPassword" placeholder="Enter new password (min 8 characters)">
+        </div>
+        
+        <div class="form-group">
+          <label for="confirmPassword">Confirm New Password</label>
+          <input type="password" id="confirmPassword" placeholder="Confirm new password">
+        </div>
+        
+        <button class="btn btn-primary" onclick="changePassword()">Change Password</button>
+      </div>
+      
+      <!-- API Token Section -->
+      <div style="padding: 16px; background: var(--gray-50); border-radius: var(--radius-md);">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">API Token</h3>
+        
+        <p style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">
+          Use API tokens to access the file manager programmatically without session authentication.
+        </p>
+        
+        <div id="noApiKeyMsg" style="padding: 12px; background: var(--warning); color: white; border-radius: var(--radius-sm); margin-bottom: 12px;">
+          ⚠️ You don't have an API token yet.
+        </div>
+        
+        <div id="apiKeyDisplay" style="display: none; margin-bottom: 12px;">
+          <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 13px;">Your API Token:</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="apiKeyValue" readonly style="flex: 1; font-family: monospace; font-size: 12px; background: var(--gray-100);">
+            <button class="btn btn-secondary" onclick="copyApiToken()">📋 Copy</button>
+          </div>
+          <p style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
+            Usage: <code>Authorization: Bearer YOUR_TOKEN</code> or <code>?apiKey=YOUR_TOKEN</code>
+          </p>
+        </div>
+        
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-success" onclick="generateApiToken()">🔑 Generate New Token</button>
+          <button class="btn btn-danger" onclick="deleteApiToken()">🗑️ Delete Token</button>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeUserSettings()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Management Modal (Admin Only) -->
+  <div id="userManagementModal" class="modal">
+    <div class="modal-content" style="max-width: 800px;">
+      <div class="modal-header">
+        <h2>👥 User Management</h2>
+      </div>
+      
+      <div id="userMgmtAlert" class="alert"></div>
+      
+      <!-- Create User Section -->
+      <div style="margin-bottom: 24px; padding: 16px; background: var(--gray-50); border-radius: var(--radius-md);">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Create New User</h3>
+        
+        <div style="display: flex; gap: 12px; align-items: flex-end;">
+          <div class="form-group" style="flex: 1; margin-bottom: 0;">
+            <label for="newUsername">Username</label>
+            <input type="text" id="newUsername" placeholder="Enter username">
+          </div>
+          
+          <div class="form-group" style="width: 150px; margin-bottom: 0;">
+            <label for="newUserRole">Role</label>
+            <select id="newUserRole" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px;">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          
+          <button class="btn btn-primary" onclick="createUser()">Create User</button>
+        </div>
+        
+        <p style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);">
+          A random password will be generated and displayed once. Make sure to save it.
+        </p>
+      </div>
+      
+      <!-- User List -->
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: var(--gray-100); border-bottom: 2px solid var(--border);">
+              <th style="padding: 12px; text-align: left; font-weight: 600; font-size: 13px;">Username</th>
+              <th style="padding: 12px; text-align: left; font-weight: 600; font-size: 13px;">Role</th>
+              <th style="padding: 12px; text-align: left; font-weight: 600; font-size: 13px;">Has API Token</th>
+              <th style="padding: 12px; text-align: left; font-weight: 600; font-size: 13px;">Created</th>
+              <th style="padding: 12px; text-align: left; font-weight: 600; font-size: 13px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody">
+            <!-- User rows will be inserted here -->
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeUserManagement()">Close</button>
       </div>
     </div>
   </div>

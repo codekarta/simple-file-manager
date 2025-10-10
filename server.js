@@ -4,10 +4,10 @@ import multer from 'multer';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs/promises';
-import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
+import * as credentialsManager from './credentials-manager.js';
 
-// ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -17,13 +17,16 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+// Initialize credentials on startup
+(async () => {
+  await credentialsManager.initializeCredentials();
+})();
 
 // Ensure upload directory exists
 const uploadsPath = path.join(__dirname, UPLOAD_DIR);
 if (!existsSync(uploadsPath)) {
-  await fs.mkdir(uploadsPath, { recursive: true });
+  fs.mkdir(uploadsPath, { recursive: true }).catch(console.error);
 }
 
 // Middleware
@@ -33,25 +36,23 @@ app.use(express.urlencoded({ extended: true }));
 // Session configuration with proper cookie settings
 app.use(session({
   secret: process.env.SESSION_SECRET || 'default-secret-key',
-  resave: true, // Force session to be saved even if not modified
-  saveUninitialized: false, // Don't create session until something stored
+  resave: true,
+  saveUninitialized: false,
   cookie: { 
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    httpOnly: true, // Prevent XSS attacks
-    secure: false, // Set to true if using HTTPS
-    sameSite: 'lax' // CSRF protection
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax'
   },
-  name: 'filemanager.sid' // Custom session cookie name
+  name: 'filemanager.sid'
 }));
 
-// Configure multer for file uploads - store in temp location first
+// Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Store in uploads root temporarily
     cb(null, uploadsPath);
   },
   filename: (req, file, cb) => {
-    // Use a temporary name to avoid conflicts
     cb(null, `temp_${Date.now()}_${file.originalname}`);
   }
 });
@@ -60,35 +61,69 @@ const upload = multer({
   storage,
   limits: { 
     fileSize: 100 * 1024 * 1024, // 100MB per file
-    files: 500 // Allow up to 500 files (for folder uploads)
+    files: 500
   }
 });
 
-// Authentication middleware with better logging
-const requireAuth = (req, res, next) => {
-  // Debug logging
-  console.log('Auth check:', {
-    hasSession: !!req.session,
-    authenticated: req.session?.authenticated,
-    sessionID: req.sessionID,
-    cookie: req.headers.cookie ? 'present' : 'missing'
-  });
-  
-  if (req.session && req.session.authenticated) {
-    next();
-  } else {
-    console.log('Authentication failed for:', req.path);
+// Enhanced authentication middleware supporting both session and API tokens
+const requireAuth = async (req, res, next) => {
+  try {
+    // Check for API token in Authorization header (Bearer token)
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const apiKey = authHeader.substring(7);
+      const user = await credentialsManager.getUserByApiKey(apiKey);
+      
+      if (user) {
+        req.user = user;
+        req.authMethod = 'api_token';
+        return next();
+      }
+    }
+    
+    // Check for API token in query parameter
+    if (req.query.apiKey || req.query.api_key) {
+      const apiKey = req.query.apiKey || req.query.api_key;
+      const user = await credentialsManager.getUserByApiKey(apiKey);
+      
+      if (user) {
+        req.user = user;
+        req.authMethod = 'api_token';
+        return next();
+      }
+    }
+    
+    // Check session authentication
+    if (req.session && req.session.authenticated) {
+      req.user = await credentialsManager.getUserByUsername(req.session.username);
+      req.authMethod = 'session';
+      return next();
+    }
+    
+    // No valid authentication found
     res.status(401).json({ 
       error: 'Authentication required',
-      debug: {
-        hasSession: !!req.session,
-        authenticated: req.session?.authenticated
-      }
+      message: 'Please provide a valid session or API token'
+    });
+  } catch (error) {
+    console.error('Auth error:', error);
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+};
+
+// Admin-only middleware
+const requireAdmin = async (req, res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    res.status(403).json({ 
+      error: 'Admin access required',
+      message: 'This operation requires administrator privileges'
     });
   }
 };
 
-// Serve static files publicly (this allows myapp.com/products/tshirt.jpg)
+// Serve static files publicly
 app.use(express.static(uploadsPath));
 
 // Serve admin panel
@@ -96,32 +131,65 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Serve admin static assets (JS, CSS)
+// Serve admin static assets
 app.get('/admin/:file', (req, res) => {
   const file = req.params.file;
   res.sendFile(path.join(__dirname, 'public', file));
 });
 
-// API Routes
+// ===== AUTHENTICATION API ROUTES =====
 
 // Login
-app.post('/api/login', (req, res) => {
-  const { username, password } = req.body;
-  
-  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+app.post('/api/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Username and password are required' 
+      });
+    }
+    
+    const user = await credentialsManager.getUserByUsername(username);
+    
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid credentials' 
+      });
+    }
+    
+    const isValid = await credentialsManager.verifyPassword(password, user.password);
+    
+    if (!isValid) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid credentials' 
+      });
+    }
+    
     req.session.authenticated = true;
     req.session.username = username;
+    req.session.role = user.role;
     
-    // Explicitly save the session to ensure it persists
     req.session.save((err) => {
       if (err) {
         console.error('Session save error:', err);
         return res.status(500).json({ success: false, error: 'Session save failed' });
       }
-      res.json({ success: true, message: 'Login successful' });
+      res.json({ 
+        success: true, 
+        message: 'Login successful',
+        user: {
+          username: user.username,
+          role: user.role
+        }
+      });
     });
-  } else {
-    res.status(401).json({ success: false, error: 'Invalid credentials' });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -138,12 +206,177 @@ app.post('/api/logout', (req, res) => {
 });
 
 // Check authentication status
-app.get('/api/auth/status', (req, res) => {
-  res.json({ 
-    authenticated: !!req.session.authenticated,
-    username: req.session.username 
-  });
+app.get('/api/auth/status', async (req, res) => {
+  try {
+    if (req.session && req.session.authenticated) {
+      const userInfo = await credentialsManager.getUserInfo(req.session.username);
+      res.json({ 
+        authenticated: true,
+        user: userInfo
+      });
+    } else {
+      res.json({ 
+        authenticated: false 
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
+
+// ===== USER MANAGEMENT API ROUTES =====
+
+// Get current user info
+app.get('/api/user/me', requireAuth, async (req, res) => {
+  try {
+    const userInfo = await credentialsManager.getUserInfo(req.user.username);
+    res.json({ success: true, user: userInfo });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Change password
+app.post('/api/user/change-password', requireAuth, async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ 
+        error: 'Old password and new password are required' 
+      });
+    }
+    
+    if (newPassword.length < 8) {
+      return res.status(400).json({ 
+        error: 'New password must be at least 8 characters long' 
+      });
+    }
+    
+    await credentialsManager.changePassword(
+      req.user.username, 
+      oldPassword, 
+      newPassword
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'Password changed successfully' 
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Generate API token
+app.post('/api/user/generate-token', requireAuth, async (req, res) => {
+  try {
+    const { password } = req.body;
+    
+    if (!password) {
+      return res.status(400).json({ 
+        error: 'Password is required to generate API token' 
+      });
+    }
+    
+    const apiKey = await credentialsManager.generateApiToken(
+      req.user.username, 
+      password
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'API token generated successfully',
+      apiKey 
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Delete API token
+app.delete('/api/user/delete-token', requireAuth, async (req, res) => {
+  try {
+    const { password } = req.body;
+    
+    if (!password) {
+      return res.status(400).json({ 
+        error: 'Password is required to delete API token' 
+      });
+    }
+    
+    await credentialsManager.deleteApiToken(req.user.username, password);
+    
+    res.json({ 
+      success: true, 
+      message: 'API token deleted successfully' 
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ===== ADMIN USER MANAGEMENT API ROUTES =====
+
+// List all users (admin only)
+app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const users = await credentialsManager.listUsers();
+    res.json({ success: true, users });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create user (admin only)
+app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { username, role } = req.body;
+    
+    if (!username) {
+      return res.status(400).json({ 
+        error: 'Username is required' 
+      });
+    }
+    
+    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+      return res.status(400).json({ 
+        error: 'Username can only contain letters, numbers, hyphens, and underscores' 
+      });
+    }
+    
+    const newUser = await credentialsManager.createUser(
+      username, 
+      role || 'user'
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'User created successfully',
+      user: newUser
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Delete user (admin only)
+app.delete('/api/admin/users/:username', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    await credentialsManager.deleteUser(username, req.user.username);
+    
+    res.json({ 
+      success: true, 
+      message: 'User deleted successfully' 
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ===== FILE MANAGEMENT API ROUTES =====
 
 // List files and directories
 app.get('/api/files', requireAuth, async (req, res) => {
@@ -194,9 +427,8 @@ app.get('/api/files', requireAuth, async (req, res) => {
 app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res) => {
   try {
     const basePath = req.body.basePath || req.body.path || '';
-    const relativePaths = req.body.relativePaths; // Array for folder uploads
+    const relativePaths = req.body.relativePaths;
     
-    // Detect if this is a folder upload
     const isFolderUpload = relativePaths && (Array.isArray(relativePaths) ? relativePaths.length > 0 : true);
     
     if (isFolderUpload) {
@@ -205,34 +437,27 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       console.log(`Files: ${req.files.length}`);
     }
     
-    // Move files to the correct location
     const movedFiles = [];
-    const createdFolders = new Set(); // Track created folders for logging
+    const createdFolders = new Set();
     
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
       let targetPath;
       let relativePath;
       
-      // Check if this is a folder upload with relative paths
       if (relativePaths && Array.isArray(relativePaths) && relativePaths[i]) {
-        // For folder uploads: basePath + relativePath
         relativePath = relativePaths[i];
         targetPath = path.join(uploadsPath, basePath, relativePath);
       } else if (relativePaths && !Array.isArray(relativePaths)) {
-        // Single folder (relativePaths is a string)
         relativePath = relativePaths;
         targetPath = path.join(uploadsPath, basePath, relativePath);
       } else {
-        // For regular file uploads: basePath + filename
         targetPath = path.join(uploadsPath, basePath, file.originalname);
       }
       
-      // Ensure the directory exists (creates all parent folders automatically)
       const targetDir = path.dirname(targetPath);
       await fs.mkdir(targetDir, { recursive: true });
       
-      // Track created folders
       if (isFolderUpload) {
         const folderPath = path.relative(uploadsPath, targetDir);
         if (folderPath) {
@@ -240,7 +465,6 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
         }
       }
       
-      // Move the file from temp location to target location
       await fs.rename(file.path, targetPath);
       
       movedFiles.push({
@@ -250,7 +474,6 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       });
     }
     
-    // Log folder structure created
     if (isFolderUpload && createdFolders.size > 0) {
       console.log(`✅ Created folder structure:`);
       Array.from(createdFolders).sort().forEach(folder => {
@@ -260,10 +483,8 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       console.log(`📄 Uploaded ${movedFiles.length} files`);
     }
     
-    // Determine message based on upload type
     let message;
     if (relativePaths) {
-      // Extract folder name from first relative path
       const folderName = Array.isArray(relativePaths) 
         ? relativePaths[0].split('/')[0] 
         : relativePaths.split('/')[0];
@@ -280,7 +501,6 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
     });
   } catch (error) {
     console.error('Upload error:', error);
-    // Clean up any uploaded files on error
     if (req.files) {
       for (const file of req.files) {
         try {
@@ -300,7 +520,6 @@ app.post('/api/folder', requireAuth, async (req, res) => {
     const { path: subPath, name } = req.body;
     const folderPath = path.join(uploadsPath, subPath || '', name);
     
-    // Security check
     if (!folderPath.startsWith(uploadsPath)) {
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -318,7 +537,6 @@ app.delete('/api/delete', requireAuth, async (req, res) => {
     const { path: itemPath } = req.body;
     const fullPath = path.join(uploadsPath, itemPath);
     
-    // Security check
     if (!fullPath.startsWith(uploadsPath) || fullPath === uploadsPath) {
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -344,7 +562,6 @@ app.post('/api/rename', requireAuth, async (req, res) => {
     const oldPath = path.join(uploadsPath, itemPath);
     const newPath = path.join(path.dirname(oldPath), newName);
     
-    // Security check
     if (!oldPath.startsWith(uploadsPath) || !newPath.startsWith(uploadsPath)) {
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -362,7 +579,6 @@ app.get('/api/download', requireAuth, async (req, res) => {
     const itemPath = req.query.path;
     const fullPath = path.join(uploadsPath, itemPath);
     
-    // Security check
     if (!fullPath.startsWith(uploadsPath)) {
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -452,10 +668,8 @@ app.get('/', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`\n🚀 File Manager Server running on http://localhost:${PORT}`);
   console.log(`📁 Upload directory: ${uploadsPath}`);
-  console.log(`👤 Admin username: ${ADMIN_USERNAME}`);
   console.log(`\n📋 Access the admin panel at: http://localhost:${PORT}/admin\n`);
 });
-

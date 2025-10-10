@@ -3,6 +3,7 @@ let currentPath = '';
 let selectedFiles = [];
 let renameTarget = null;
 let selectedItems = new Set(); // For bulk delete
+let currentUser = null; // Store current user info
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -54,7 +55,8 @@ async function checkAuth() {
     const data = await response.json();
     
     if (data.authenticated) {
-      showApp(data.username);
+      currentUser = data.user;
+      showApp(data.user);
     } else {
       showLogin();
     }
@@ -80,7 +82,8 @@ async function handleLogin(e) {
     const data = await response.json();
     
     if (data.success) {
-      showApp(username);
+      currentUser = data.user;
+      showApp(data.user);
     } else {
       showAlert('loginAlert', data.error || 'Invalid credentials', 'error');
     }
@@ -106,10 +109,22 @@ function showLogin() {
   document.getElementById('appContainer').classList.remove('active');
 }
 
-function showApp(username) {
+function showApp(user) {
   document.getElementById('loginContainer').style.display = 'none';
   document.getElementById('appContainer').classList.add('active');
+  
+  // Set username
+  const username = typeof user === 'string' ? user : user.username;
+  const role = typeof user === 'string' ? 'user' : user.role;
+  currentUser = typeof user === 'string' ? { username, role: 'user' } : user;
+  
   document.getElementById('currentUser').textContent = username;
+  
+  // Show/hide admin menu items
+  const adminItems = document.querySelectorAll('.admin-only');
+  adminItems.forEach(item => {
+    item.style.display = role === 'admin' ? 'block' : 'none';
+  });
   
   loadFiles();
   loadStorageInfo();
@@ -788,5 +803,280 @@ function showAlert(elementId, message, type) {
   setTimeout(() => {
     alert.classList.remove('active');
   }, 5000);
+}
+
+// ========== USER MANAGEMENT FUNCTIONS ==========
+
+// Open user settings
+function openUserSettings() {
+  document.getElementById('userSettingsModal').classList.add('active');
+  loadUserInfo();
+}
+
+function closeUserSettings() {
+  document.getElementById('userSettingsModal').classList.remove('active');
+}
+
+// Load current user info
+async function loadUserInfo() {
+  try {
+    const response = await fetch('/api/user/me', {
+      credentials: 'include'
+    });
+    const data = await response.json();
+    
+    if (response.ok) {
+      currentUser = data.user;
+      
+      // Display API key if exists
+      const apiKeyDisplay = document.getElementById('apiKeyDisplay');
+      const noApiKeyMsg = document.getElementById('noApiKeyMsg');
+      const apiKeyValue = document.getElementById('apiKeyValue');
+      
+      if (data.user.hasApiKey) {
+        apiKeyDisplay.style.display = 'block';
+        noApiKeyMsg.style.display = 'none';
+        apiKeyValue.textContent = data.user.apiKey || '********';
+      } else {
+        apiKeyDisplay.style.display = 'none';
+        noApiKeyMsg.style.display = 'block';
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load user info:', error);
+  }
+}
+
+// Change password
+async function changePassword() {
+  const oldPassword = document.getElementById('oldPassword').value;
+  const newPassword = document.getElementById('newPassword').value;
+  const confirmPassword = document.getElementById('confirmPassword').value;
+  
+  if (!oldPassword || !newPassword || !confirmPassword) {
+    showAlert('userSettingsAlert', 'All password fields are required', 'error');
+    return;
+  }
+  
+  if (newPassword !== confirmPassword) {
+    showAlert('userSettingsAlert', 'New passwords do not match', 'error');
+    return;
+  }
+  
+  if (newPassword.length < 8) {
+    showAlert('userSettingsAlert', 'Password must be at least 8 characters', 'error');
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/user/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldPassword, newPassword }),
+      credentials: 'include'
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showAlert('userSettingsAlert', 'Password changed successfully', 'success');
+      document.getElementById('oldPassword').value = '';
+      document.getElementById('newPassword').value = '';
+      document.getElementById('confirmPassword').value = '';
+    } else {
+      showAlert('userSettingsAlert', data.error || 'Failed to change password', 'error');
+    }
+  } catch (error) {
+    showAlert('userSettingsAlert', 'Failed to change password', 'error');
+  }
+}
+
+// Generate API token
+async function generateApiToken() {
+  const password = prompt('Enter your password to generate API token:');
+  
+  if (!password) {
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/user/generate-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+      credentials: 'include'
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showAlert('userSettingsAlert', 'API token generated successfully', 'success');
+      loadUserInfo();
+      
+      // Show the API key in a copyable format
+      alert(`Your new API token (save this securely):\n\n${data.apiKey}\n\nYou can use it in Bearer token or as URL parameter.`);
+    } else {
+      showAlert('userSettingsAlert', data.error || 'Failed to generate token', 'error');
+    }
+  } catch (error) {
+    showAlert('userSettingsAlert', 'Failed to generate token', 'error');
+  }
+}
+
+// Delete API token
+async function deleteApiToken() {
+  if (!confirm('Are you sure you want to delete your API token? This action cannot be undone.')) {
+    return;
+  }
+  
+  const password = prompt('Enter your password to delete API token:');
+  
+  if (!password) {
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/user/delete-token', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+      credentials: 'include'
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showAlert('userSettingsAlert', 'API token deleted successfully', 'success');
+      loadUserInfo();
+    } else {
+      showAlert('userSettingsAlert', data.error || 'Failed to delete token', 'error');
+    }
+  } catch (error) {
+    showAlert('userSettingsAlert', 'Failed to delete token', 'error');
+  }
+}
+
+// Copy API token to clipboard
+function copyApiToken() {
+  const apiKeyValue = document.getElementById('apiKeyValue').textContent;
+  navigator.clipboard.writeText(apiKeyValue).then(() => {
+    showAlert('userSettingsAlert', 'API token copied to clipboard', 'success');
+  }).catch(() => {
+    showAlert('userSettingsAlert', 'Failed to copy token', 'error');
+  });
+}
+
+// ========== ADMIN USER MANAGEMENT FUNCTIONS ==========
+
+// Open user management modal
+function openUserManagement() {
+  document.getElementById('userManagementModal').classList.add('active');
+  loadUsers();
+}
+
+function closeUserManagement() {
+  document.getElementById('userManagementModal').classList.remove('active');
+}
+
+// Load all users (admin only)
+async function loadUsers() {
+  try {
+    const response = await fetch('/api/admin/users', {
+      credentials: 'include'
+    });
+    const data = await response.json();
+    
+    if (response.ok) {
+      renderUserList(data.users);
+    } else {
+      showAlert('userMgmtAlert', data.error || 'Failed to load users', 'error');
+    }
+  } catch (error) {
+    showAlert('userMgmtAlert', 'Failed to load users', 'error');
+  }
+}
+
+// Render user list
+function renderUserList(users) {
+  const tbody = document.getElementById('userTableBody');
+  
+  tbody.innerHTML = users.map(user => `
+    <tr>
+      <td>${user.username}</td>
+      <td><span class="user-role ${user.role}">${user.role}</span></td>
+      <td>${user.hasApiKey ? '✅ Yes' : '❌ No'}</td>
+      <td>${new Date(user.createdAt).toLocaleDateString()}</td>
+      <td>
+        <button class="btn btn-danger btn-sm" onclick="deleteUser('${user.username}')" 
+                ${user.username === currentUser.username ? 'disabled title="Cannot delete yourself"' : ''}>
+          Delete
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// Create new user (admin only)
+async function createUser() {
+  const username = document.getElementById('newUsername').value.trim();
+  const role = document.getElementById('newUserRole').value;
+  
+  if (!username) {
+    showAlert('userMgmtAlert', 'Username is required', 'error');
+    return;
+  }
+  
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+    showAlert('userMgmtAlert', 'Username can only contain letters, numbers, hyphens, and underscores', 'error');
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, role }),
+      credentials: 'include'
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showAlert('userMgmtAlert', `User created successfully. Password: ${data.user.password}`, 'success');
+      alert(`User created successfully!\n\nUsername: ${data.user.username}\nPassword: ${data.user.password}\nRole: ${data.user.role}\n\nPlease save this password securely. It won't be shown again.`);
+      document.getElementById('newUsername').value = '';
+      document.getElementById('newUserRole').value = 'user';
+      loadUsers();
+    } else {
+      showAlert('userMgmtAlert', data.error || 'Failed to create user', 'error');
+    }
+  } catch (error) {
+    showAlert('userMgmtAlert', 'Failed to create user', 'error');
+  }
+}
+
+// Delete user (admin only)
+async function deleteUser(username) {
+  if (!confirm(`Are you sure you want to delete user "${username}"?`)) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/admin/users/${username}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showAlert('userMgmtAlert', 'User deleted successfully', 'success');
+      loadUsers();
+    } else {
+      showAlert('userMgmtAlert', data.error || 'Failed to delete user', 'error');
+    }
+  } catch (error) {
+    showAlert('userMgmtAlert', 'Failed to delete user', 'error');
+  }
 }
 
