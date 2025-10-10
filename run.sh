@@ -9,6 +9,18 @@ APP_NAME="simple-file-manager"
 NODE_ENV="${NODE_ENV:-production}"
 PORT="${PORT:-3000}"
 
+# Function to read .env file
+read_env_value() {
+    local key=$1
+    local default=$2
+    if [ -f ".env" ]; then
+        local value=$(grep "^${key}=" .env | cut -d '=' -f2- | tr -d '\r')
+        echo "${value:-$default}"
+    else
+        echo "$default"
+    fi
+}
+
 # Colors for output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -91,13 +103,31 @@ pm2 save
 print_message "✓ Application started successfully!" "$GREEN"
 echo ""
 
+# Read configuration from .env
+ENV_PORT=$(read_env_value "PORT" "$PORT")
+ENV_UPLOAD_DIR=$(read_env_value "UPLOAD_DIR" "uploads")
+ENV_ALLOW_EXTERNAL=$(read_env_value "ALLOW_EXTERNAL_UPLOAD_FOLDER" "false")
+
 # Display application info
 print_message "📋 Application Information:" "$BLUE"
 echo "   • Name: $APP_NAME"
-echo "   • Port: $PORT"
+echo "   • Port: $ENV_PORT"
 echo "   • Environment: $NODE_ENV"
-echo "   • Admin Panel: http://localhost:$PORT/admin"
-echo "   • API Docs: http://localhost:$PORT/api-docs"
+echo "   • URL: http://localhost:$ENV_PORT"
+echo "   • Admin Panel: http://localhost:$ENV_PORT/admin"
+echo "   • API Docs: http://localhost:$ENV_PORT/api-docs"
+echo ""
+
+# Display storage configuration
+print_message "💾 Storage Configuration:" "$BLUE"
+echo "   • Upload Directory: $ENV_UPLOAD_DIR"
+
+# Display ALLOW_EXTERNAL_UPLOAD_FOLDER status with color
+if [ "$ENV_ALLOW_EXTERNAL" = "true" ]; then
+    echo -e "   • External Upload Folder: ${GREEN}✓ Allowed${NC}"
+else
+    echo -e "   • External Upload Folder: ${YELLOW}✗ Not Allowed (Default)${NC}"
+fi
 echo ""
 
 # Display PM2 commands
