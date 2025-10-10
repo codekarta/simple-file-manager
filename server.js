@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { homedir } from 'os';
 import * as credentialsManager from './credentials-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,16 +18,82 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
+const ALLOW_EXTERNAL_UPLOAD_FOLDER = process.env.ALLOW_EXTERNAL_UPLOAD_FOLDER === 'true';
 
 // Initialize credentials on startup
 (async () => {
   await credentialsManager.initializeCredentials();
 })();
 
+// Resolve upload directory path (supports absolute paths, ~ for home, or relative paths)
+function resolveUploadPath(uploadDir) {
+  let resolvedPath;
+  let pathType;
+  let isOutsideRoot = false;
+  
+  // Handle tilde (~) expansion for home directory
+  if (uploadDir.startsWith('~/') || uploadDir === '~') {
+    resolvedPath = path.join(homedir(), uploadDir.slice(1));
+    pathType = 'home directory';
+    isOutsideRoot = true;
+  }
+  // If it's an absolute path, use it as-is
+  else if (path.isAbsolute(uploadDir)) {
+    resolvedPath = uploadDir;
+    pathType = 'absolute path';
+    isOutsideRoot = true;
+  }
+  // Otherwise, treat it as relative to the application directory
+  else {
+    resolvedPath = path.join(__dirname, uploadDir);
+    pathType = 'relative path';
+    isOutsideRoot = false;
+  }
+  
+  console.log(`\n📂 Upload Directory Configuration:`);
+  console.log(`   Type: ${pathType}`);
+  console.log(`   Configured: ${uploadDir}`);
+  console.log(`   Resolved: ${resolvedPath}`);
+  
+  // Security check: prevent access outside root unless explicitly allowed
+  if (isOutsideRoot && !ALLOW_EXTERNAL_UPLOAD_FOLDER) {
+    console.error(`\n❌ SECURITY ERROR: Access outside application root is not allowed!`);
+    console.error(`\n   The configured upload directory is outside the application folder.`);
+    console.error(`   For security reasons, this requires explicit permission.\n`);
+    console.error(`   To allow this, add to your .env file:`);
+    console.error(`   ALLOW_EXTERNAL_UPLOAD_FOLDER=true\n`);
+    console.error(`   Current configuration:`);
+    console.error(`   - UPLOAD_DIR=${uploadDir}`);
+    console.error(`   - Resolves to: ${resolvedPath}`);
+    console.error(`   - Application root: ${__dirname}\n`);
+    console.error(`   ⚠️  Security Warning: Only enable this if you understand the implications.`);
+    console.error(`   External paths should have proper permissions and access controls.\n`);
+    process.exit(1);
+  }
+  
+  if (isOutsideRoot && ALLOW_EXTERNAL_UPLOAD_FOLDER) {
+    console.log(`   🔓 External access: Allowed (ALLOW_EXTERNAL_UPLOAD_FOLDER=true)`);
+  } else {
+    console.log(`   🔒 Location: Inside application root (secure)`);
+  }
+  
+  return resolvedPath;
+}
+
 // Ensure upload directory exists
-const uploadsPath = path.join(__dirname, UPLOAD_DIR);
+const uploadsPath = resolveUploadPath(UPLOAD_DIR);
 if (!existsSync(uploadsPath)) {
-  fs.mkdir(uploadsPath, { recursive: true }).catch(console.error);
+  console.log(`   Status: Creating directory...`);
+  fs.mkdir(uploadsPath, { recursive: true })
+    .then(() => console.log(`   ✓ Directory created successfully`))
+    .catch(err => {
+      console.error(`   ✗ Failed to create directory: ${err.message}`);
+      console.error(`\n⚠️  Please ensure the path exists and you have write permissions.`);
+      console.error(`   Fix: Run 'mkdir -p ${uploadsPath}' or set a different UPLOAD_DIR in .env\n`);
+      process.exit(1);
+    });
+} else {
+  console.log(`   Status: ✓ Directory exists`);
 }
 
 // Middleware
@@ -723,7 +790,9 @@ app.get('/', (req, res) => {
 
 // Start server
 app.listen(PORT, async () => {
-  console.log(`\n🚀 File Manager Server running on http://localhost:${PORT}`);
-  console.log(`📁 Upload directory: ${uploadsPath}`);
-  console.log(`\n📋 Access the admin panel at: http://localhost:${PORT}/admin\n`);
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`🚀 File Manager Server running on http://localhost:${PORT}`);
+  console.log(`📋 Admin Panel: http://localhost:${PORT}/admin`);
+  console.log(`📖 API Docs: http://localhost:${PORT}/api-docs`);
+  console.log(`${'='.repeat(60)}\n`);
 });

@@ -118,6 +118,8 @@ Follow these steps to get up and running in minutes:
 npm install
 ```
 
+**Note:** A comprehensive `.env.example` file is included with detailed configuration options.
+
 ### 2. Configure Environment
 
 Copy the example environment file:
@@ -125,16 +127,44 @@ Copy the example environment file:
 cp .env.example .env
 ```
 
-Edit `.env` with your preferred credentials:
+Edit `.env` with your preferred settings. The `.env.example` file contains detailed documentation for all options:
+
 ```env
+# Server Configuration
+PORT=3000
+
+# Upload Directory - Choose ONE option:
+# Option 1: Relative path (default - secure)
+UPLOAD_DIR=uploads
+
+# Option 2: Absolute path (requires ALLOW_EXTERNAL_UPLOAD_FOLDER=true)
+# UPLOAD_DIR=/var/www/filemanager-uploads
+
+# Option 3: User home directory (requires ALLOW_EXTERNAL_UPLOAD_FOLDER=true)
+# UPLOAD_DIR=~/filemanager-uploads
+
+# Security: Allow external paths (required for Options 2 & 3)
+ALLOW_EXTERNAL_UPLOAD_FOLDER=false
+# Set to 'true' to allow paths outside the application directory
+
+# Authentication
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=your_secure_password
-PORT=3000
+
+# Session Secret (generate with: openssl rand -base64 32)
 SESSION_SECRET=your-random-secret-key-here
-UPLOAD_DIR=uploads
 ```
 
-⚠️ **Important:** Change the default password before using in production!
+⚠️ **Important:** 
+- Change the default password before using in production!
+- The `UPLOAD_DIR` setting allows you to store files outside the application directory
+- See `.env.example` for detailed configuration options and examples
+
+**Optional: Use Setup Script**
+```bash
+./setup-upload-dir.sh
+```
+This interactive script helps you configure and test the upload directory.
 
 ### 3. Start the Application
 
@@ -172,7 +202,8 @@ All configuration is done through the `.env` file:
 | `ADMIN_PASSWORD` | Admin login password | `admin123` | Yes |
 | `PORT` | Server port number | `3000` | No |
 | `SESSION_SECRET` | Secret key for sessions | Auto-generated | Yes |
-| `UPLOAD_DIR` | Directory for file storage | `uploads` | No |
+| `UPLOAD_DIR` | Directory for file storage (relative, absolute, or ~/home) | `uploads` | No |
+| `ALLOW_EXTERNAL_UPLOAD_FOLDER` | Allow upload dir outside app folder (security) | `false` | No |
 
 ### Security Configuration
 
@@ -190,9 +221,58 @@ Copy the output and set it as `SESSION_SECRET` in your `.env` file.
 ### Storage Configuration
 
 **Change Upload Directory:**
+
+The `UPLOAD_DIR` environment variable supports three path formats:
+
 ```env
-UPLOAD_DIR=my-custom-folder
+# Option 1: Relative path (Default - Secure)
+UPLOAD_DIR=uploads
+ALLOW_EXTERNAL_UPLOAD_FOLDER=false
+
+# Option 2: Absolute path (Requires explicit permission)
+UPLOAD_DIR=/var/www/filemanager-uploads
+ALLOW_EXTERNAL_UPLOAD_FOLDER=true
+
+# Option 3: User home directory (Requires explicit permission)
+UPLOAD_DIR=~/filemanager-uploads
+ALLOW_EXTERNAL_UPLOAD_FOLDER=true
 ```
+
+**🔒 Security Feature:**
+
+For security reasons, paths outside the application directory require explicit permission via `ALLOW_EXTERNAL_UPLOAD_FOLDER=true`. This prevents accidental or malicious configuration of external paths.
+
+**Examples:**
+
+```bash
+# Secure default (inside application)
+UPLOAD_DIR=uploads
+# No ALLOW_EXTERNAL_UPLOAD_FOLDER needed
+
+# Store files in user's home directory (requires permission)
+UPLOAD_DIR=~/Documents/uploads
+ALLOW_EXTERNAL_UPLOAD_FOLDER=true
+
+# Store files in a separate partition (requires permission)
+UPLOAD_DIR=/mnt/storage/uploads
+ALLOW_EXTERNAL_UPLOAD_FOLDER=true
+
+# Store files in /opt directory (requires permission)
+UPLOAD_DIR=/opt/filemanager/uploads
+ALLOW_EXTERNAL_UPLOAD_FOLDER=true
+```
+
+**Important Notes:**
+- **Security Default:** External access is disabled by default (`ALLOW_EXTERNAL_UPLOAD_FOLDER=false`)
+- The directory will be created automatically if it doesn't exist
+- Ensure the Node.js process has read/write permissions for the directory
+- For absolute paths in production, make sure to set proper permissions:
+  ```bash
+  sudo mkdir -p /var/www/filemanager-uploads
+  sudo chown -R $USER:$USER /var/www/filemanager-uploads
+  sudo chmod 755 /var/www/filemanager-uploads
+  ```
+- The server will refuse to start if you try to use an external path without setting `ALLOW_EXTERNAL_UPLOAD_FOLDER=true`
 
 **File Upload Limits:**
 - Maximum file size: 100MB per file
