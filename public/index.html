@@ -1088,10 +1088,10 @@
           ⚠️ You don't have an API token yet.
         </div>
         
-        <div id="apiKeyDisplay" style="display: none; margin-bottom: 12px;">
+        <div style="margin-bottom: 12px;">
           <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 13px;">Your API Token:</label>
           <div style="display: flex; gap: 8px;">
-            <input type="text" id="apiKeyValue" readonly style="flex: 1; font-family: monospace; font-size: 12px; background: var(--gray-100);">
+            <input type="text" id="apiKeyValue" readonly placeholder="No token generated yet" style="flex: 1; font-family: monospace; font-size: 12px; background: var(--gray-100);">
             <button class="btn btn-secondary" onclick="copyApiToken()">📋 Copy</button>
           </div>
           <p style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
@@ -1124,25 +1124,35 @@
       <div style="margin-bottom: 24px; padding: 16px; background: var(--gray-50); border-radius: var(--radius-md);">
         <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Create New User</h3>
         
-        <div style="display: flex; gap: 12px; align-items: flex-end;">
-          <div class="form-group" style="flex: 1; margin-bottom: 0;">
-            <label for="newUsername">Username</label>
-            <input type="text" id="newUsername" placeholder="Enter username">
+        <div style="display: grid; gap: 12px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 150px auto; gap: 12px; align-items: end;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="newUsername">Username or Email</label>
+              <input type="text" id="newUsername" placeholder="Enter username or email">
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="newUserPassword">Password</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="newUserPassword" placeholder="Auto-generated password" style="flex: 1;">
+                <button type="button" class="btn btn-secondary" onclick="generateRandomPassword()" title="Generate new password" style="padding: 10px 12px;">🔄</button>
+              </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="newUserRole">Role</label>
+              <select id="newUserRole" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px;">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            
+            <button class="btn btn-primary" onclick="createUser()">Create User</button>
           </div>
-          
-          <div class="form-group" style="width: 150px; margin-bottom: 0;">
-            <label for="newUserRole">Role</label>
-            <select id="newUserRole" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px;">
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          
-          <button class="btn btn-primary" onclick="createUser()">Create User</button>
         </div>
         
         <p style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);">
-          A random password will be generated and displayed once. Make sure to save it.
+          💡 A random password is auto-generated. You can keep it or enter your own custom password.
         </p>
       </div>
       
@@ -1166,6 +1176,50 @@
       
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeUserManagement()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Dialog Modals -->
+  <div id="customAlertModal" class="modal">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h2 id="customAlertTitle">Alert</h2>
+      </div>
+      <div id="customAlertMessage" style="padding: 20px; line-height: 1.6; white-space: pre-wrap;">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeCustomAlert()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="customConfirmModal" class="modal">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h2 id="customConfirmTitle">Confirm</h2>
+      </div>
+      <div id="customConfirmMessage" style="padding: 20px; line-height: 1.6;">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCustomConfirm(false)">Cancel</button>
+        <button class="btn btn-primary" onclick="closeCustomConfirm(true)">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="customPromptModal" class="modal">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h2 id="customPromptTitle">Input Required</h2>
+      </div>
+      <div style="padding: 20px;">
+        <p id="customPromptMessage" style="margin-bottom: 16px; line-height: 1.6;"></p>
+        <input type="password" id="customPromptInput" class="form-control" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px;">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCustomPrompt(null)">Cancel</button>
+        <button class="btn btn-primary" onclick="closeCustomPrompt(document.getElementById('customPromptInput').value)">OK</button>
       </div>
     </div>
   </div>

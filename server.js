@@ -331,7 +331,7 @@ app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
 // Create user (admin only)
 app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { username, role } = req.body;
+    const { username, role, password } = req.body;
     
     if (!username) {
       return res.status(400).json({ 
@@ -339,21 +339,49 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
       });
     }
     
-    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+    // Allow simple usernames or valid email addresses
+    const simpleUsernamePattern = /^[a-zA-Z0-9_-]+$/;
+    const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    
+    if (!simpleUsernamePattern.test(username) && !emailPattern.test(username)) {
       return res.status(400).json({ 
-        error: 'Username can only contain letters, numbers, hyphens, and underscores' 
+        error: 'Username must be alphanumeric (with hyphens/underscores) or a valid email address' 
       });
     }
     
     const newUser = await credentialsManager.createUser(
       username, 
-      role || 'user'
+      role || 'user',
+      password
     );
     
     res.json({ 
       success: true, 
       message: 'User created successfully',
       user: newUser
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Reset user password (admin only)
+app.post('/api/admin/users/:username/reset-password', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    if (username === req.user.username) {
+      return res.status(400).json({ 
+        error: 'Cannot reset your own password. Use the change password feature instead.' 
+      });
+    }
+    
+    const newPassword = await credentialsManager.resetUserPassword(username, req.user.username);
+    
+    res.json({ 
+      success: true, 
+      message: 'Password reset successfully',
+      newPassword
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
