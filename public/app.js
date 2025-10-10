@@ -606,6 +606,25 @@ function downloadFile(path) {
 
 // Search
 let searchTimeout;
+let isRegexEnabled = false;
+
+function toggleRegex() {
+  isRegexEnabled = !isRegexEnabled;
+  const regexToggle = document.getElementById('regexToggle');
+  
+  if (isRegexEnabled) {
+    regexToggle.classList.add('active');
+  } else {
+    regexToggle.classList.remove('active');
+  }
+  
+  // Re-trigger search if there's text
+  const searchInput = document.getElementById('searchInput');
+  if (searchInput.value.trim().length >= 2) {
+    handleSearch({ target: searchInput });
+  }
+}
+
 function handleSearch(event) {
   clearTimeout(searchTimeout);
   
@@ -617,22 +636,24 @@ function handleSearch(event) {
   }
   
   searchTimeout = setTimeout(() => {
-    searchFiles(query);
+    searchFiles(query, isRegexEnabled);
   }, 500);
 }
 
-async function searchFiles(query) {
+async function searchFiles(query, useRegex = false) {
   showLoading(true);
   
   try {
-    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+    const url = `/api/search?q=${encodeURIComponent(query)}&regex=${useRegex}`;
+    const response = await fetch(url, {
       credentials: 'include'
     });
     const data = await response.json();
     
     if (response.ok) {
       renderFileList(data.results);
-      document.getElementById('breadcrumb').innerHTML = `<span class="breadcrumb-item active">🔍 Search results for "${query}"</span>`;
+      const searchType = useRegex ? ' (Regex)' : '';
+      document.getElementById('breadcrumb').innerHTML = `<span class="breadcrumb-item active">🔍 Search results for "${query}"${searchType}</span>`;
     } else {
       showAlert('alert', data.error || 'Search failed', 'error');
     }

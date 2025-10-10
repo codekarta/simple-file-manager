@@ -131,6 +131,11 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Serve API documentation page
+app.get('/api-docs', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'api-docs.html'));
+});
+
 // Serve admin static assets
 app.get('/admin/:file', (req, res) => {
   const file = req.params.file;
@@ -620,8 +625,21 @@ app.get('/api/download', requireAuth, async (req, res) => {
 // Search files
 app.get('/api/search', requireAuth, async (req, res) => {
   try {
-    const query = req.query.q?.toLowerCase() || '';
+    const query = req.query.q || '';
+    const useRegex = req.query.regex === 'true';
     const results = [];
+    
+    // Validate regex if enabled
+    let regexPattern;
+    if (useRegex) {
+      try {
+        regexPattern = new RegExp(query, 'i'); // case-insensitive
+      } catch (e) {
+        return res.status(400).json({ 
+          error: `Invalid regular expression: ${e.message}` 
+        });
+      }
+    }
     
     async function searchDir(dirPath) {
       const items = await fs.readdir(dirPath, { withFileTypes: true });
@@ -630,7 +648,15 @@ app.get('/api/search', requireAuth, async (req, res) => {
         const fullPath = path.join(dirPath, item.name);
         const relativePath = path.relative(uploadsPath, fullPath);
         
-        if (item.name.toLowerCase().includes(query)) {
+        // Check if filename matches
+        let matches = false;
+        if (useRegex) {
+          matches = regexPattern.test(item.name);
+        } else {
+          matches = item.name.toLowerCase().includes(query.toLowerCase());
+        }
+        
+        if (matches) {
           const stats = await fs.stat(fullPath);
           results.push({
             name: item.name,
