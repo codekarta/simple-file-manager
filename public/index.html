@@ -331,13 +331,34 @@
       align-items: center;
     }
 
-    /* Breadcrumb - Inline */
+    /* Breadcrumb - Clickable to Edit */
+    .breadcrumb-container {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      min-width: 200px;
+      max-width: 600px;
+      flex: 1;
+      position: relative;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      transition: var(--transition);
+      cursor: text;
+    }
+    
+    .breadcrumb-container:hover {
+      border-color: var(--border);
+      background: var(--gray-50);
+    }
+    
     .breadcrumb {
       display: flex;
       align-items: center;
       gap: 6px;
       font-size: 13px;
-      min-width: 200px;
+      flex: 1;
+      padding: 6px 12px;
+      min-height: 32px;
     }
 
     .breadcrumb-item {
@@ -346,11 +367,35 @@
       transition: var(--transition);
       padding: 4px 6px;
       border-radius: var(--radius-sm);
+      position: relative;
+      z-index: 1;
     }
 
     .breadcrumb-item:hover {
       color: var(--primary);
       background: var(--gray-100);
+    }
+    
+    /* Path Input - Hidden by default, shown when editing */
+    .path-input {
+      flex: 1;
+      padding: 6px 12px;
+      border: 1px solid var(--primary);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+    
+    .path-input:focus {
+      outline: none;
+    }
+    
+    .path-input::placeholder {
+      color: var(--gray-400);
+      font-style: italic;
     }
 
     .breadcrumb-item.active {
@@ -440,6 +485,45 @@
       background: var(--primary);
       color: white;
       border-color: var(--primary);
+    }
+    
+    /* Hidden Files Toggle */
+    .hidden-files-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: var(--transition);
+      white-space: nowrap;
+      user-select: none;
+      color: var(--text);
+    }
+    
+    .hidden-files-toggle .icon {
+      font-size: 14px;
+      opacity: 0.5;
+      transition: var(--transition);
+    }
+    
+    .hidden-files-toggle:hover {
+      background: var(--gray-100);
+      border-color: var(--gray-300);
+    }
+    
+    .hidden-files-toggle.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+    
+    .hidden-files-toggle.active .icon {
+      opacity: 1;
     }
 
     .search-icon {
@@ -825,6 +909,12 @@
         flex-wrap: wrap;
       }
 
+      .breadcrumb-container {
+        width: 100%;
+        min-width: auto;
+        max-width: none;
+      }
+      
       .breadcrumb {
         min-width: auto;
         flex-wrap: wrap;
@@ -950,7 +1040,10 @@
     <!-- Compact Toolbar with Breadcrumb -->
     <div class="toolbar-breadcrumb">
       <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: 1;">
-        <div class="breadcrumb" id="breadcrumb"></div>
+        <div class="breadcrumb-container" onclick="enablePathEdit(event)" title="Click to edit path">
+          <div class="breadcrumb" id="breadcrumb"></div>
+          <input type="text" id="pathInput" class="path-input" style="display: none;" onkeydown="handlePathInputKeydown(event)" onblur="disablePathEdit()" placeholder="/path/to/folder">
+        </div>
         <div class="toolbar-left">
           <button class="btn btn-primary btn-sm" onclick="openUploadModal()">
             📤 Upload Files
@@ -967,6 +1060,10 @@
         </div>
       </div>
       <div class="toolbar-right">
+        <button class="hidden-files-toggle" id="hiddenFilesToggle" onclick="toggleHiddenFiles()" title="Show hidden files">
+          <span class="icon">👁️</span>
+          <span class="label">Hidden</span>
+        </button>
         <div class="search-box">
           <div class="search-input-wrapper">
             <span class="search-icon">🔍</span>

@@ -4,6 +4,7 @@ let selectedFiles = [];
 let renameTarget = null;
 let selectedItems = new Set(); // For bulk delete
 let currentUser = null; // Store current user info
+let showHiddenFiles = localStorage.getItem('showHiddenFiles') === 'true'; // Hidden files visibility preference
 
 // Custom modal callbacks
 let customAlertCallback = null;
@@ -14,6 +15,7 @@ let customPromptCallback = null;
 document.addEventListener('DOMContentLoaded', () => {
   checkAuth();
   setupEventListeners();
+  updateHiddenFilesButton(); // Initialize hidden files button state
   
   // Generate initial random password when user management modal is opened
   document.addEventListener('click', function(e) {
@@ -184,7 +186,12 @@ function renderFileList(items) {
   updateBulkDeleteButton();
   document.getElementById('selectAll').checked = false;
   
-  if (items.length === 0) {
+  // Filter hidden files if setting is disabled
+  const filteredItems = showHiddenFiles 
+    ? items 
+    : items.filter(item => !item.name.startsWith('.'));
+  
+  if (filteredItems.length === 0) {
     fileTable.style.display = 'none';
     emptyState.style.display = 'block';
     return;
@@ -193,7 +200,7 @@ function renderFileList(items) {
   fileTable.style.display = 'table';
   emptyState.style.display = 'none';
   
-  tbody.innerHTML = items.map(item => {
+  tbody.innerHTML = filteredItems.map(item => {
     const thumbnail = getFileThumbnail(item.name, item.path, item.isDirectory);
     const size = item.isDirectory ? '-' : formatFileSize(item.size);
     const modified = new Date(item.modified).toLocaleString();
@@ -232,9 +239,10 @@ function renderFileList(items) {
 
 function renderBreadcrumb(path) {
   const breadcrumb = document.getElementById('breadcrumb');
+  const pathInput = document.getElementById('pathInput');
   const parts = path ? path.split('/').filter(p => p) : [];
   
-  let html = '<span class="breadcrumb-item" onclick="loadFiles(\'\')">🏠 Home</span>';
+  let html = '<span class="breadcrumb-item" onclick="event.stopPropagation(); loadFiles(\'\')">🏠 Home</span>';
   
   let currentPath = '';
   parts.forEach((part, index) => {
@@ -242,10 +250,20 @@ function renderBreadcrumb(path) {
     const isLast = index === parts.length - 1;
     
     html += '<span class="breadcrumb-separator">/</span>';
-    html += `<span class="breadcrumb-item ${isLast ? 'active' : ''}" onclick="loadFiles('${currentPath}')">${part}</span>`;
+    html += `<span class="breadcrumb-item ${isLast ? 'active' : ''}" onclick="event.stopPropagation(); loadFiles('${currentPath}')">${part}</span>`;
   });
   
   breadcrumb.innerHTML = html;
+  breadcrumb.style.display = 'flex';
+  
+  // Store current path in data attribute for editing
+  breadcrumb.dataset.currentPath = path || '';
+  
+  // Update path input value (hidden by default)
+  if (pathInput) {
+    pathInput.value = path ? '/' + path : '/';
+    pathInput.style.display = 'none';
+  }
 }
 
 function getFileThumbnail(filename, filepath, isDirectory) {
@@ -827,6 +845,93 @@ function showLoading(show) {
   } else {
     loading.classList.remove('active');
     content.style.display = 'block';
+  }
+}
+
+// Toggle hidden files visibility
+function toggleHiddenFiles() {
+  showHiddenFiles = !showHiddenFiles;
+  localStorage.setItem('showHiddenFiles', showHiddenFiles.toString());
+  updateHiddenFilesButton();
+  loadFiles(currentPath); // Reload current directory with new filter
+}
+
+// Update hidden files button appearance
+function updateHiddenFilesButton() {
+  const btn = document.getElementById('hiddenFilesToggle');
+  if (btn) {
+    if (showHiddenFiles) {
+      btn.classList.add('active');
+      btn.title = 'Hide hidden files';
+    } else {
+      btn.classList.remove('active');
+      btn.title = 'Show hidden files';
+    }
+  }
+}
+
+// Enable path editing mode when clicking breadcrumb area
+function enablePathEdit(event) {
+  // Don't enable if clicking on a breadcrumb item (they handle navigation)
+  if (event && event.target.classList.contains('breadcrumb-item')) {
+    return;
+  }
+  
+  const breadcrumb = document.getElementById('breadcrumb');
+  const pathInput = document.getElementById('pathInput');
+  
+  if (breadcrumb && pathInput) {
+    // Switch to edit mode
+    breadcrumb.style.display = 'none';
+    pathInput.style.display = 'block';
+    
+    // Focus and move cursor to end of text
+    setTimeout(() => {
+      pathInput.focus();
+      // Move cursor to end
+      const length = pathInput.value.length;
+      pathInput.setSelectionRange(length, length);
+    }, 0);
+  }
+}
+
+// Disable path editing mode (called on blur or after navigation)
+function disablePathEdit() {
+  const breadcrumb = document.getElementById('breadcrumb');
+  const pathInput = document.getElementById('pathInput');
+  
+  if (breadcrumb && pathInput) {
+    // Show breadcrumb, hide input
+    setTimeout(() => {
+      breadcrumb.style.display = 'flex';
+      pathInput.style.display = 'none';
+    }, 100);
+  }
+}
+
+// Handle path input navigation
+function handlePathInputKeydown(event) {
+  const pathInput = document.getElementById('pathInput');
+  
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    let path = pathInput.value.trim();
+    
+    // Remove leading/trailing slashes for navigation
+    path = path.replace(/^\/+|\/+$/g, '');
+    
+    // Navigate to the path
+    loadFiles(path);
+    
+    // Blur will trigger disablePathEdit
+    pathInput.blur();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    // Cancel editing - restore original path
+    const breadcrumb = document.getElementById('breadcrumb');
+    const originalPath = breadcrumb?.dataset.currentPath || '';
+    pathInput.value = originalPath ? '/' + originalPath : '/';
+    pathInput.blur();
   }
 }
 
