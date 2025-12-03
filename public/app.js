@@ -10,6 +10,8 @@ let showHiddenFiles = localStorage.getItem('showHiddenFiles') === 'true'; // Hid
 let customAlertCallback = null;
 let customConfirmCallback = null;
 let customPromptCallback = null;
+let passwordResetCallback = null;
+let passwordResetUsername = null;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -1019,7 +1021,64 @@ function closeCustomPrompt(result) {
 
 // ========== USER MANAGEMENT FUNCTIONS ==========
 
-// Open user settings
+// Open About modal
+async function openAbout() {
+  document.getElementById('aboutModal').classList.add('active');
+  await loadAboutInfo();
+}
+
+function closeAbout() {
+  document.getElementById('aboutModal').classList.remove('active');
+}
+
+// Load about information
+async function loadAboutInfo() {
+  try {
+    const response = await fetch('/api/about', {
+      credentials: 'include'
+    });
+    const data = await response.json();
+    
+    if (response.ok) {
+      document.getElementById('aboutVersion').textContent = data.version || 'Unknown';
+      document.getElementById('aboutDescription').textContent = data.description || 'Simple file manager with authentication';
+      document.getElementById('aboutLicense').textContent = data.license || 'MIT';
+    } else {
+      document.getElementById('aboutVersion').textContent = 'Unknown';
+      document.getElementById('aboutDescription').textContent = 'Simple file manager with authentication';
+      document.getElementById('aboutLicense').textContent = 'MIT';
+    }
+  } catch (error) {
+    console.error('Failed to load about info:', error);
+    document.getElementById('aboutVersion').textContent = 'Unknown';
+    document.getElementById('aboutDescription').textContent = 'Simple file manager with authentication';
+    document.getElementById('aboutLicense').textContent = 'MIT';
+  }
+}
+
+// Open change password modal
+function openChangePasswordModal() {
+  document.getElementById('changePasswordModal').classList.add('active');
+  document.getElementById('oldPassword').value = '';
+  document.getElementById('newPassword').value = '';
+  document.getElementById('confirmPassword').value = '';
+  document.getElementById('changePasswordAlert').className = 'alert';
+  document.getElementById('changePasswordAlert').textContent = '';
+  
+  // Focus on first input
+  setTimeout(() => {
+    document.getElementById('oldPassword').focus();
+  }, 100);
+}
+
+function closeChangePasswordModal() {
+  document.getElementById('changePasswordModal').classList.remove('active');
+  document.getElementById('oldPassword').value = '';
+  document.getElementById('newPassword').value = '';
+  document.getElementById('confirmPassword').value = '';
+}
+
+// Open API Token modal
 function openUserSettings() {
   document.getElementById('userSettingsModal').classList.add('active');
   loadUserInfo();
@@ -1064,17 +1123,17 @@ async function changePassword() {
   const confirmPassword = document.getElementById('confirmPassword').value;
   
   if (!oldPassword || !newPassword || !confirmPassword) {
-    showAlert('userSettingsAlert', 'All password fields are required', 'error');
+    showAlert('changePasswordAlert', 'All password fields are required', 'error');
     return;
   }
   
   if (newPassword !== confirmPassword) {
-    showAlert('userSettingsAlert', 'New passwords do not match', 'error');
+    showAlert('changePasswordAlert', 'New passwords do not match', 'error');
     return;
   }
   
   if (newPassword.length < 8) {
-    showAlert('userSettingsAlert', 'Password must be at least 8 characters', 'error');
+    showAlert('changePasswordAlert', 'Password must be at least 8 characters', 'error');
     return;
   }
   
@@ -1089,15 +1148,19 @@ async function changePassword() {
     const data = await response.json();
     
     if (response.ok) {
-      showAlert('userSettingsAlert', 'Password changed successfully', 'success');
-      document.getElementById('oldPassword').value = '';
-      document.getElementById('newPassword').value = '';
-      document.getElementById('confirmPassword').value = '';
+      showAlert('changePasswordAlert', 'Password changed successfully', 'success');
+      // Clear fields and close modal after a short delay
+      setTimeout(() => {
+        document.getElementById('oldPassword').value = '';
+        document.getElementById('newPassword').value = '';
+        document.getElementById('confirmPassword').value = '';
+        closeChangePasswordModal();
+      }, 1500);
     } else {
-      showAlert('userSettingsAlert', data.error || 'Failed to change password', 'error');
+      showAlert('changePasswordAlert', data.error || 'Failed to change password', 'error');
     }
   } catch (error) {
-    showAlert('userSettingsAlert', 'Failed to change password', 'error');
+    showAlert('changePasswordAlert', 'Failed to change password', 'error');
   }
 }
 
@@ -1307,14 +1370,81 @@ async function createUser() {
 
 // Reset user password (admin only)
 async function resetUserPassword(username) {
-  const confirmed = await customConfirm(`Are you sure you want to reset password for user "${username}"?\n\nA new random password will be generated.`, 'Reset User Password');
-  if (!confirmed) {
-    return;
+  passwordResetUsername = username;
+  document.getElementById('passwordResetTitle').textContent = 'Reset User Password';
+  document.getElementById('passwordResetMessage').textContent = `Are you sure you want to reset password for user "${username}"?`;
+  document.getElementById('passwordResetCustomSection').style.display = 'none';
+  document.getElementById('passwordResetCustomInput').value = '';
+  document.getElementById('passwordResetAlert').className = 'alert';
+  document.getElementById('passwordResetAlert').textContent = '';
+  document.getElementById('passwordResetChooseBtn').style.display = 'inline-block';
+  const resetBtn = document.getElementById('passwordResetAutoBtn');
+  resetBtn.textContent = 'Auto Generate';
+  resetBtn.setAttribute('onclick', 'confirmPasswordReset(true)');
+  document.getElementById('passwordResetModal').classList.add('active');
+  
+  // Focus on input if it becomes visible
+  setTimeout(() => {
+    const customInput = document.getElementById('passwordResetCustomInput');
+    if (customInput && customInput.offsetParent !== null) {
+      customInput.focus();
+    }
+  }, 100);
+  
+  return new Promise((resolve) => {
+    passwordResetCallback = resolve;
+  });
+}
+
+// Show custom password input in reset modal
+function showPasswordResetCustomInput() {
+  document.getElementById('passwordResetCustomSection').style.display = 'block';
+  document.getElementById('passwordResetChooseBtn').style.display = 'none';
+  const resetBtn = document.getElementById('passwordResetAutoBtn');
+  resetBtn.textContent = 'Reset Password';
+  resetBtn.setAttribute('onclick', 'confirmPasswordReset(false)');
+  
+  setTimeout(() => {
+    document.getElementById('passwordResetCustomInput').focus();
+  }, 100);
+  
+  // Handle Enter key in custom password input
+  const customInput = document.getElementById('passwordResetCustomInput');
+  const handleEnter = (e) => {
+    if (e.key === 'Enter') {
+      confirmPasswordReset(false);
+      customInput.removeEventListener('keypress', handleEnter);
+    }
+  };
+  customInput.addEventListener('keypress', handleEnter);
+}
+
+// Confirm password reset (auto-generate or custom)
+async function confirmPasswordReset(autoGenerate) {
+  const username = passwordResetUsername;
+  let customPassword = null;
+  
+  if (!autoGenerate) {
+    customPassword = document.getElementById('passwordResetCustomInput').value.trim();
+    
+    if (!customPassword) {
+      showAlert('passwordResetAlert', 'Please enter a password', 'error');
+      return;
+    }
+    
+    if (customPassword.length < 8) {
+      showAlert('passwordResetAlert', 'Password must be at least 8 characters long', 'error');
+      return;
+    }
   }
+  
+  closePasswordResetModal();
   
   try {
     const response = await fetch(`/api/admin/users/${username}/reset-password`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customPassword: customPassword || null }),
       credentials: 'include'
     });
     
@@ -1322,13 +1452,31 @@ async function resetUserPassword(username) {
     
     if (response.ok) {
       showAlert('userMgmtAlert', 'Password reset successfully', 'success');
-      await customAlert(`Password reset successfully for user "${username}"!\n\nNew Password: ${data.newPassword}\n\nPlease save this password securely and share it with the user. It won't be shown again.`, 'Password Reset');
+      const passwordMessage = autoGenerate 
+        ? `Password reset successfully for user "${username}"!\n\nNew Password: ${data.newPassword}\n\nPlease save this password securely and share it with the user. It won't be shown again.`
+        : `Password reset successfully for user "${username}"!\n\nCustom password has been set.`;
+      await customAlert(passwordMessage, 'Password Reset');
       loadUsers();
     } else {
       showAlert('userMgmtAlert', data.error || 'Failed to reset password', 'error');
     }
   } catch (error) {
     showAlert('userMgmtAlert', 'Failed to reset password', 'error');
+  }
+  
+  if (passwordResetCallback) {
+    passwordResetCallback();
+    passwordResetCallback = null;
+  }
+}
+
+// Close password reset modal
+function closePasswordResetModal() {
+  document.getElementById('passwordResetModal').classList.remove('active');
+  passwordResetUsername = null;
+  if (passwordResetCallback) {
+    passwordResetCallback();
+    passwordResetCallback = null;
   }
 }
 

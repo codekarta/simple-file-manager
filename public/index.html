@@ -305,6 +305,19 @@
       padding: 6px 12px;
       background: var(--gray-100);
       border-radius: var(--radius-sm);
+      transition: var(--transition);
+      user-select: none;
+    }
+
+    .user-info:hover {
+      background: var(--gray-200);
+      color: var(--primary);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .user-info:active {
+      transform: translateY(0);
     }
 
     /* Compact Toolbar - Combined with breadcrumb */
@@ -1027,11 +1040,12 @@
         </div>
       </div>
       <div class="header-right">
-        <span class="user-info">
+        <span class="user-info" style="cursor: pointer;" onclick="openChangePasswordModal()" title="Click to change password">
           👤 <span id="currentUser"></span>
         </span>
         <a href="/api-docs" class="btn btn-secondary btn-sm" style="text-decoration: none;">📖 API Docs</a>
-        <button class="btn btn-secondary btn-sm" onclick="openUserSettings()">⚙️ Settings</button>
+        <button class="btn btn-secondary btn-sm" onclick="openAbout()">ℹ️ About</button>
+        <button class="btn btn-secondary btn-sm" onclick="openUserSettings()">🔑 API Token</button>
         <button class="btn btn-secondary btn-sm admin-only" onclick="openUserManagement()" style="display: none;">👥 Users</button>
         <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
       </div>
@@ -1189,36 +1203,47 @@
     </div>
   </div>
 
-  <!-- User Settings Modal -->
-  <div id="userSettingsModal" class="modal">
-    <div class="modal-content" style="max-width: 600px;">
+  <!-- Change Password Modal -->
+  <div id="changePasswordModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
       <div class="modal-header">
-        <h2>⚙️ User Settings</h2>
+        <h2>🔐 Change Password</h2>
       </div>
       
-      <div id="userSettingsAlert" class="alert"></div>
-      
-      <!-- Change Password Section -->
-      <div style="margin-bottom: 24px; padding: 16px; background: var(--gray-50); border-radius: var(--radius-md);">
-        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Change Password</h3>
+      <div style="padding: 20px;">
+        <div id="changePasswordAlert" class="alert"></div>
         
         <div class="form-group">
           <label for="oldPassword">Current Password</label>
-          <input type="password" id="oldPassword" placeholder="Enter current password">
+          <input type="password" id="oldPassword" placeholder="Enter current password" onkeypress="if(event.key==='Enter') document.getElementById('newPassword').focus()">
         </div>
         
         <div class="form-group">
           <label for="newPassword">New Password</label>
-          <input type="password" id="newPassword" placeholder="Enter new password (min 8 characters)">
+          <input type="password" id="newPassword" placeholder="Enter new password (min 8 characters)" onkeypress="if(event.key==='Enter') document.getElementById('confirmPassword').focus()">
         </div>
         
         <div class="form-group">
           <label for="confirmPassword">Confirm New Password</label>
-          <input type="password" id="confirmPassword" placeholder="Confirm new password">
+          <input type="password" id="confirmPassword" placeholder="Confirm new password" onkeypress="if(event.key==='Enter') changePassword()">
         </div>
-        
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeChangePasswordModal()">Cancel</button>
         <button class="btn btn-primary" onclick="changePassword()">Change Password</button>
       </div>
+    </div>
+  </div>
+
+  <!-- API Token Modal -->
+  <div id="userSettingsModal" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>🔑 API Token</h2>
+      </div>
+      
+      <div id="userSettingsAlert" class="alert"></div>
       
       <!-- API Token Section -->
       <div style="padding: 16px; background: var(--gray-50); border-radius: var(--radius-md);">
@@ -1364,6 +1389,84 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeCustomPrompt(null)">Cancel</button>
         <button class="btn btn-primary" onclick="closeCustomPrompt(document.getElementById('customPromptInput').value)">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Password Reset Modal -->
+  <div id="passwordResetModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 id="passwordResetTitle">Reset User Password</h2>
+      </div>
+      <div style="padding: 20px;">
+        <p id="passwordResetMessage" style="margin-bottom: 16px; line-height: 1.6;"></p>
+        <div id="passwordResetCustomSection" style="display: none; margin-top: 16px;">
+          <div class="form-group">
+            <label for="passwordResetCustomInput">Enter Custom Password</label>
+            <input type="password" id="passwordResetCustomInput" class="form-control" placeholder="Enter password (min 8 characters)" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px;">
+            <p style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">Password must be at least 8 characters long</p>
+          </div>
+        </div>
+        <div id="passwordResetAlert" class="alert" style="margin-top: 12px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closePasswordResetModal()">Cancel</button>
+        <button id="passwordResetChooseBtn" class="btn btn-secondary" onclick="showPasswordResetCustomInput()">Choose Password</button>
+        <button id="passwordResetAutoBtn" class="btn btn-primary" onclick="confirmPasswordReset(true)">Auto Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- About Modal -->
+  <div id="aboutModal" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>ℹ️ About</h2>
+      </div>
+      <div style="padding: 16px;">
+        <div id="aboutContent" style="line-height: 1.6;">
+          <div style="text-align: center; margin-bottom: 16px;">
+            <h1 style="font-size: 24px; margin-bottom: 4px;">📁 Simple File Manager</h1>
+            <div style="margin: 8px 0;">
+              <strong style="font-size: 14px;">Version <span id="aboutVersion">Loading...</span></strong>
+            </div>
+          </div>
+          
+          <div style="margin-bottom: 12px;">
+            <h3 style="margin-bottom: 6px; font-size: 14px; color: var(--primary);">Description</h3>
+            <p id="aboutDescription" style="color: var(--text-secondary); font-size: 13px; margin: 0;">Loading...</p>
+          </div>
+          
+          <div style="margin-bottom: 12px;">
+            <h3 style="margin-bottom: 6px; font-size: 14px; color: var(--primary);">Credits</h3>
+            <div style="color: var(--text-secondary); font-size: 13px;">
+              <p style="margin-bottom: 6px; margin-top: 0;"><strong>Built with:</strong></p>
+              <ul style="margin-left: 18px; margin-bottom: 8px; margin-top: 0; padding-left: 0;">
+                <li><strong>Express.js</strong> - Web framework</li>
+                <li><strong>Multer</strong> - File upload handling</li>
+                <li><strong>Express-session</strong> - Session management</li>
+                <li><strong>bcryptjs</strong> - Password hashing</li>
+                <li>Modern vanilla JavaScript and CSS</li>
+              </ul>
+              <p style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); margin-bottom: 4px;">
+                <strong>License:</strong> <span id="aboutLicense">MIT</span>
+              </p>
+            </div>
+          </div>
+          
+          <div style="text-align: center; padding-top: 12px; border-top: 1px solid var(--border);">
+            <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0;">
+              Powered by <a href="https://github.com/codekarta/simple-file-manager" target="_blank" style="color: var(--primary); text-decoration: none;">Simple File Manager</a>
+            </p>
+            <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0;">
+              Powered by <strong style="color: var(--primary);">AlgoDomain Solutions</strong>
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeAbout()">Close</button>
       </div>
     </div>
   </div>

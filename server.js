@@ -441,6 +441,7 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
 app.post('/api/admin/users/:username/reset-password', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { username } = req.params;
+    const { customPassword } = req.body;
     
     if (username === req.user.username) {
       return res.status(400).json({ 
@@ -448,12 +449,21 @@ app.post('/api/admin/users/:username/reset-password', requireAuth, requireAdmin,
       });
     }
     
-    const newPassword = await credentialsManager.resetUserPassword(username, req.user.username);
+    // Validate custom password if provided
+    if (customPassword !== undefined && customPassword !== null) {
+      if (customPassword.length < 8) {
+        return res.status(400).json({ 
+          error: 'Password must be at least 8 characters long' 
+        });
+      }
+    }
+    
+    const newPassword = await credentialsManager.resetUserPassword(username, req.user.username, customPassword);
     
     res.json({ 
       success: true, 
       message: 'Password reset successfully',
-      newPassword
+      newPassword: customPassword ? undefined : newPassword // Only return password if auto-generated
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -777,6 +787,23 @@ app.get('/api/storage', requireAuth, async (req, res) => {
       totalSize,
       fileCount,
       folderCount
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get app version and info
+app.get('/api/about', async (req, res) => {
+  try {
+    const packageJsonPath = path.join(__dirname, 'package.json');
+    const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
+    
+    res.json({
+      version: packageJson.version,
+      name: packageJson.name,
+      description: packageJson.description,
+      license: packageJson.license
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -214,12 +214,54 @@
       font-family: 'Courier New', monospace;
       font-size: 13px;
       line-height: 1.6;
+      position: relative;
     }
 
     pre code {
       background: transparent;
       padding: 0;
       color: inherit;
+    }
+
+    /* Copy Button */
+    .copy-button {
+      position: absolute;
+      top: var(--spacing-sm);
+      right: var(--spacing-sm);
+      background: var(--gray-700);
+      color: #e5e7eb;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: var(--transition);
+      opacity: 1;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .copy-button:hover {
+      background: var(--gray-600);
+      transform: translateY(-1px);
+    }
+
+    .copy-button:active {
+      transform: translateY(0);
+    }
+
+    .copy-button.copied {
+      background: var(--success);
+      color: white;
+    }
+
+    .copy-button svg {
+      width: 14px;
+      height: 14px;
     }
 
     /* Tables */
@@ -488,8 +530,7 @@
       <p><strong>Via Web Interface:</strong></p>
       <ol>
         <li>Login to the admin panel</li>
-        <li>Click "⚙️ Settings"</li>
-        <li>Scroll to API Token section</li>
+        <li>Click "🔑 API Token"</li>
         <li>Click "🔑 Generate New Token"</li>
         <li>Enter your password</li>
         <li>Save the token securely!</li>
@@ -1038,6 +1079,191 @@ main();</code></pre>
       </p>
     </div>
   </div>
+
+  <script>
+    // Replace all hardcoded URLs with dynamic ones based on current hostname
+    (function() {
+      // Add copy buttons to all code blocks
+      function addCopyButtons() {
+        // Select all pre elements (both with and without code children)
+        const preBlocks = document.querySelectorAll('pre');
+        
+        preBlocks.forEach((pre) => {
+          // Skip if copy button already exists
+          if (pre.querySelector('.copy-button')) {
+            return;
+          }
+
+          // Skip if pre is empty
+          if (!pre.textContent || !pre.textContent.trim()) {
+            return;
+          }
+
+          // Create copy button
+          const copyButton = document.createElement('button');
+          copyButton.className = 'copy-button';
+          copyButton.setAttribute('aria-label', 'Copy code');
+          copyButton.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span class="copy-text">Copy</span>
+          `;
+
+          // Add copy functionality
+          copyButton.addEventListener('click', async () => {
+            // Get text from the pre element (works whether it has code child or not)
+            const text = pre.textContent || pre.innerText;
+            
+            try {
+              await navigator.clipboard.writeText(text);
+              
+              // Update button state
+              const copyText = copyButton.querySelector('.copy-text');
+              copyText.textContent = 'Copied!';
+              copyButton.classList.add('copied');
+              
+              // Reset after 2 seconds
+              setTimeout(() => {
+                copyText.textContent = 'Copy';
+                copyButton.classList.remove('copied');
+              }, 2000);
+            } catch (err) {
+              // Fallback for older browsers
+              const textArea = document.createElement('textarea');
+              textArea.value = text;
+              textArea.style.position = 'fixed';
+              textArea.style.opacity = '0';
+              document.body.appendChild(textArea);
+              textArea.select();
+              
+              try {
+                document.execCommand('copy');
+                const copyText = copyButton.querySelector('.copy-text');
+                copyText.textContent = 'Copied!';
+                copyButton.classList.add('copied');
+                
+                setTimeout(() => {
+                  copyText.textContent = 'Copy';
+                  copyButton.classList.remove('copied');
+                }, 2000);
+              } catch (fallbackErr) {
+                console.error('Failed to copy:', fallbackErr);
+              }
+              
+              document.body.removeChild(textArea);
+            }
+          });
+
+          // Append button to pre element
+          pre.appendChild(copyButton);
+        });
+      }
+
+      function replaceHardcodedURLs() {
+        // Get current origin components
+        const protocol = window.location.protocol.slice(0, -1); // Remove trailing ':'
+        const hostname = window.location.hostname;
+        const port = window.location.port;
+        
+        // Build the base URL
+        let baseUrl;
+        if (port && port !== '80' && port !== '443') {
+          // Include port if it's not a default port (80 for http, 443 for https)
+          baseUrl = `${protocol}://${hostname}:${port}`;
+        } else {
+          // Use default ports
+          baseUrl = `${protocol}://${hostname}`;
+        }
+
+        // Replace URLs in all code blocks and text content
+        const codeElements = document.querySelectorAll('code, pre');
+        codeElements.forEach(el => {
+          if (el.textContent) {
+            let text = el.textContent;
+            const originalText = text;
+            
+            // Replace http://localhost:3000 or https://localhost:3000 with current base URL
+            text = text.replace(/https?:\/\/localhost:3000/g, baseUrl);
+            
+            // Also replace any other localhost:PORT patterns
+            text = text.replace(/https?:\/\/localhost:\d+/g, baseUrl);
+            
+            if (text !== originalText) {
+              el.textContent = text;
+            }
+          }
+        });
+
+        // Replace URLs in all text nodes (for URLs not in code blocks)
+        const walker = document.createTreeWalker(
+          document.body,
+          NodeFilter.SHOW_TEXT,
+          {
+            acceptNode: function(node) {
+              // Skip script and style content, and nodes already inside code/pre elements
+              const parent = node.parentElement;
+              if (!parent) return NodeFilter.FILTER_REJECT;
+              if (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE') {
+                return NodeFilter.FILTER_REJECT;
+              }
+              if (parent.closest('code') || parent.closest('pre')) {
+                return NodeFilter.FILTER_REJECT; // Already handled above
+              }
+              return NodeFilter.FILTER_ACCEPT;
+            }
+          }
+        );
+
+        let textNode;
+        while (textNode = walker.nextNode()) {
+          let text = textNode.textContent;
+          const originalText = text;
+          
+          // Replace localhost URLs
+          text = text.replace(/https?:\/\/localhost:3000/g, baseUrl);
+          text = text.replace(/https?:\/\/localhost:\d+/g, baseUrl);
+          
+          if (text !== originalText) {
+            textNode.textContent = text;
+          }
+        }
+
+        // Replace URLs in attributes (href, src, etc.)
+        const allElements = document.querySelectorAll('*');
+        allElements.forEach(el => {
+          Array.from(el.attributes || []).forEach(attr => {
+            if (attr.value && typeof attr.value === 'string') {
+              let value = attr.value;
+              const originalValue = value;
+              value = value.replace(/https?:\/\/localhost:3000/g, baseUrl);
+              value = value.replace(/https?:\/\/localhost:\d+/g, baseUrl);
+              if (value !== originalValue) {
+                el.setAttribute(attr.name, value);
+              }
+            }
+          });
+        });
+      }
+
+      // Run replacement when DOM is ready
+      function initialize() {
+        replaceHardcodedURLs();
+        // Add copy buttons after URL replacement - call multiple times to catch all blocks
+        setTimeout(addCopyButtons, 50);
+        setTimeout(addCopyButtons, 200);
+        setTimeout(addCopyButtons, 500);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initialize);
+      } else {
+        // DOM is already ready
+        initialize();
+      }
+    })();
+  </script>
 </body>
 </html>
 

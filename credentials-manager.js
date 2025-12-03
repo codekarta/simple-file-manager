@@ -114,7 +114,7 @@ async function createUser(username, role = 'user', customPassword = null) {
 }
 
 // Reset user password (admin only, cannot reset self)
-async function resetUserPassword(username, adminUsername) {
+async function resetUserPassword(username, adminUsername, customPassword = null) {
     const credentials = await readCredentials();
     
     if (username === adminUsername) {
@@ -126,15 +126,25 @@ async function resetUserPassword(username, adminUsername) {
         throw new Error('User not found');
     }
     
-    // Generate new random password
-    const newPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12);
+    // Use custom password if provided, otherwise generate random password
+    let newPassword;
+    const isCustomPassword = customPassword !== null && customPassword !== undefined;
+    
+    if (isCustomPassword) {
+        newPassword = customPassword;
+    } else {
+        // Generate new random password
+        newPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12);
+    }
+    
     user.password = await hashPassword(newPassword);
     user.passwordResetAt = new Date().toISOString();
     user.passwordResetBy = adminUsername;
     
     await writeCredentials(credentials);
     
-    return newPassword; // Return plain password only once
+    // Only return password if it was auto-generated (for display to admin)
+    return isCustomPassword ? null : newPassword;
 }
 
 // Delete user (admin only, cannot delete self)
