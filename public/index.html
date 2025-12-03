@@ -551,7 +551,7 @@
     /* Main Content */
     .main-content {
       flex: 1;
-      padding: var(--spacing-lg) var(--spacing-xl);
+      padding: var(--spacing-md) var(--spacing-sm );
       max-width: 100%;
       overflow: auto;
     }
@@ -598,7 +598,6 @@
     /* File List Container */
     .file-list-container {
       background: var(--surface);
-      border-radius: var(--radius-md);
       box-shadow: var(--shadow);
       overflow: hidden;
     }
@@ -613,15 +612,14 @@
     }
 
     thead {
-      background: var(--gray-50);
-      border-bottom: 1px solid var(--border);
+      border-bottom: 2px solid var(--border);
     }
 
     th {
-      padding: 12px var(--spacing-lg);
+      padding: 8px var(--spacing-lg);
       text-align: left;
       font-weight: 600;
-      color: var(--gray-700);
+      color: var(--gray-800);
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -629,7 +627,7 @@
     }
 
     td {
-      padding: 12px var(--spacing-lg);
+      padding: 8px var(--spacing-lg);
       border-bottom: 1px solid var(--gray-100);
       font-size: 13px;
     }
@@ -702,7 +700,7 @@
       color: var(--text);
       font-weight: 500;
       transition: var(--transition);
-      padding: 4px 0;
+      padding: 2px 0;
     }
 
     .file-name:hover {
@@ -949,7 +947,7 @@
       }
 
       .main-content {
-        padding: var(--spacing-md);
+        padding: var(--spacing-xs);
       }
 
       th, td {
