@@ -204,6 +204,10 @@ All configuration is done through the `.env` file:
 | `SESSION_SECRET` | Secret key for sessions | Auto-generated | Yes |
 | `UPLOAD_DIR` | Directory for file storage (relative, absolute, or ~/home) | `uploads` | No |
 | `ALLOW_EXTERNAL_UPLOAD_FOLDER` | Allow upload dir outside app folder (security) | `false` | No |
+| `CACHE_ENABLED` | Enable/disable file metadata caching | `true` | No |
+| `CACHE_DB_PATH` | SQLite database file location | `./cache/files.db` | No |
+| `CACHE_SYNC_INTERVAL_INTERNAL` | Cache sync interval for internal folders (ms) | `600000` (10 min) | No |
+| `CACHE_SYNC_INTERVAL_EXTERNAL` | Cache sync interval for external folders (ms) | `300000` (5 min) | No |
 
 ### Security Configuration
 

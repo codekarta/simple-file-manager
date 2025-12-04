@@ -759,6 +759,85 @@
       font-size: 13px;
     }
 
+    /* Pagination */
+    .pagination-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-top: 1px solid var(--gray-200);
+      background: var(--gray-50);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .pagination-info {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .pagination-buttons {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pagination-pages {
+      display: flex;
+      gap: 4px;
+    }
+
+    .pagination-pages button {
+      min-width: 32px;
+      padding: 6px 8px;
+      font-size: 12px;
+    }
+
+    .pagination-pages button.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    .pagination-pages .ellipsis {
+      padding: 0 6px;
+      color: var(--text-secondary);
+    }
+
+    .pagination-size {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .pagination-size select {
+      padding: 6px 10px;
+      border: 1px solid var(--gray-300);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      background: var(--surface);
+      cursor: pointer;
+    }
+
+    .pagination-size select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    @media (max-width: 768px) {
+      .pagination-controls {
+        flex-direction: column;
+        gap: 12px;
+      }
+      
+      .pagination-info {
+        order: -1;
+        width: 100%;
+        text-align: center;
+      }
+    }
+
     /* Loading */
     .loading {
       display: none;
@@ -1122,6 +1201,38 @@
           <div class="empty-state-icon">📂</div>
           <h3>No files yet</h3>
           <p>Upload your first file to get started</p>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div id="paginationControls" class="pagination-controls" style="display: none;">
+          <div class="pagination-info">
+            Showing <span id="paginationStart">1</span>-<span id="paginationEnd">50</span> 
+            of <span id="paginationTotal">0</span> items
+          </div>
+          
+          <div class="pagination-buttons">
+            <button id="prevPageBtn" class="btn btn-secondary" onclick="prevPage()" disabled>
+              ← Previous
+            </button>
+            
+            <div class="pagination-pages" id="paginationPages">
+              <!-- Page numbers inserted dynamically -->
+            </div>
+            
+            <button id="nextPageBtn" class="btn btn-secondary" onclick="nextPage()" disabled>
+              Next →
+            </button>
+          </div>
+          
+          <div class="pagination-size">
+            <label>Items per page:</label>
+            <select id="itemsPerPage" onchange="changeItemsPerPage(this.value)">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>

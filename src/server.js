@@ -4,10 +4,11 @@ import multer from 'multer';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import * as credentialsManager from './credentials-manager.js';
+import * as fileCache from './file-cache.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,10 +21,20 @@ const PORT = process.env.PORT || 3000;
 const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
 const ALLOW_EXTERNAL_UPLOAD_FOLDER = process.env.ALLOW_EXTERNAL_UPLOAD_FOLDER === 'true';
 
+// Cache configuration
+const CACHE_ENABLED = process.env.CACHE_ENABLED !== 'false'; // Default: true
+const CACHE_DB_PATH = process.env.CACHE_DB_PATH || './.cache/files.db';
+const CACHE_SYNC_INTERVAL = ALLOW_EXTERNAL_UPLOAD_FOLDER
+  ? parseInt(process.env.CACHE_SYNC_INTERVAL_EXTERNAL) || 300000   // 5 min for external
+  : parseInt(process.env.CACHE_SYNC_INTERVAL_INTERNAL) || 600000;  // 10 min for internal
+
 // Initialize credentials on startup
 (async () => {
   await credentialsManager.initializeCredentials();
 })();
+
+// Project root directory (one level up from src)
+const projectRoot = path.join(__dirname, '..');
 
 // Resolve upload directory path (supports absolute paths, ~ for home, or relative paths)
 function resolveUploadPath(uploadDir) {
@@ -43,9 +54,9 @@ function resolveUploadPath(uploadDir) {
     pathType = 'absolute path';
     isOutsideRoot = true;
   }
-  // Otherwise, treat it as relative to the application directory
+  // Otherwise, treat it as relative to the project root directory
   else {
-    resolvedPath = path.join(__dirname, uploadDir);
+    resolvedPath = path.join(projectRoot, uploadDir);
     pathType = 'relative path';
     isOutsideRoot = false;
   }
@@ -65,7 +76,7 @@ function resolveUploadPath(uploadDir) {
     console.error(`   Current configuration:`);
     console.error(`   - UPLOAD_DIR=${uploadDir}`);
     console.error(`   - Resolves to: ${resolvedPath}`);
-    console.error(`   - Application root: ${__dirname}\n`);
+    console.error(`   - Application root: ${projectRoot}\n`);
     console.error(`   ⚠️  Security Warning: Only enable this if you understand the implications.`);
     console.error(`   External paths should have proper permissions and access controls.\n`);
     process.exit(1);
@@ -195,18 +206,18 @@ app.use(express.static(uploadsPath));
 
 // Serve admin panel
 app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
 // Serve API documentation page
 app.get('/api-docs', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'api-docs.html'));
+  res.sendFile(path.join(__dirname, '..', 'public', 'api-docs.html'));
 });
 
 // Serve admin static assets
 app.get('/admin/:file', (req, res) => {
   const file = req.params.file;
-  res.sendFile(path.join(__dirname, 'public', file));
+  res.sendFile(path.join(__dirname, '..', 'public', file));
 });
 
 // ===== AUTHENTICATION API ROUTES =====
@@ -488,10 +499,13 @@ app.delete('/api/admin/users/:username', requireAuth, requireAdmin, async (req, 
 
 // ===== FILE MANAGEMENT API ROUTES =====
 
-// List files and directories
+// List files and directories with pagination
 app.get('/api/files', requireAuth, async (req, res) => {
   try {
     const subPath = req.query.path || '';
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
+    const showHidden = req.query.showHidden === 'true';
     const fullPath = path.join(uploadsPath, subPath);
     
     // Security check: prevent directory traversal
@@ -499,34 +513,72 @@ app.get('/api/files', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
     
-    const items = await fs.readdir(fullPath, { withFileTypes: true });
-    const fileList = await Promise.all(
-      items.map(async (item) => {
-        const itemPath = path.join(fullPath, item.name);
-        const stats = await fs.stat(itemPath);
-        const relativePath = path.relative(uploadsPath, itemPath);
-        
-        return {
-          name: item.name,
-          path: relativePath,
-          isDirectory: item.isDirectory(),
-          size: stats.size,
-          modified: stats.mtime,
-          created: stats.birthtime
-        };
-      })
+    // Try cache first, fallback to filesystem
+    if (fileCache.isReady()) {
+      try {
+        const { items, total } = fileCache.getFiles(subPath, page, limit, showHidden);
+        return res.json({
+          currentPath: subPath,
+          items,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+            hasNext: page * limit < total,
+            hasPrev: page > 1
+          }
+        });
+      } catch (cacheError) {
+        console.error('Cache error, falling back to filesystem:', cacheError.message);
+      }
+    }
+    
+    // Filesystem fallback with pagination
+    const allItems = await fs.readdir(fullPath, { withFileTypes: true });
+    let fileList = await Promise.all(
+      allItems
+        .filter(item => !item.isSymbolicLink()) // Skip symlinks
+        .filter(item => showHidden || !item.name.startsWith('.')) // Filter hidden files
+        .map(async (item) => {
+          const itemPath = path.join(fullPath, item.name);
+          const stats = await fs.stat(itemPath);
+          const relativePath = path.relative(uploadsPath, itemPath);
+          
+          return {
+            name: item.name,
+            path: relativePath,
+            isDirectory: item.isDirectory(),
+            size: stats.size,
+            modified: stats.mtime,
+            created: stats.birthtime
+          };
+        })
     );
     
-    // Sort: directories first, then by name
+    // Sort: directories first, then by name (case-insensitive)
     fileList.sort((a, b) => {
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
-      return a.name.localeCompare(b.name);
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
     });
+    
+    // Apply pagination
+    const total = fileList.length;
+    const offset = (page - 1) * limit;
+    const paginatedItems = fileList.slice(offset, offset + limit);
     
     res.json({ 
       currentPath: subPath,
-      items: fileList 
+      items: paginatedItems,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      }
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -577,11 +629,43 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       
       await fs.rename(file.path, targetPath);
       
+      const fileRelativePath = path.relative(uploadsPath, targetPath);
       movedFiles.push({
         name: file.originalname,
         size: file.size,
-        path: path.relative(uploadsPath, targetPath)
+        path: fileRelativePath
       });
+      
+      // Update cache for uploaded file
+      try {
+        const stats = await fs.stat(targetPath);
+        fileCache.addFile(fileRelativePath, {
+          size: stats.size,
+          modified: stats.mtimeMs,
+          created: stats.birthtimeMs,
+          isDirectory: false
+        });
+      } catch (cacheErr) {
+        // Don't fail upload if cache update fails
+        console.warn('Cache update failed for file:', fileRelativePath);
+      }
+    }
+    
+    // Update cache for created folders
+    for (const folderPath of createdFolders) {
+      try {
+        const fullFolderPath = path.join(uploadsPath, folderPath);
+        const stats = await fs.stat(fullFolderPath);
+        fileCache.addFile(folderPath, {
+          size: 0,
+          modified: stats.mtimeMs,
+          created: stats.birthtimeMs,
+          isDirectory: true
+        });
+      } catch (cacheErr) {
+        // Don't fail upload if cache update fails
+        console.warn('Cache update failed for folder:', folderPath);
+      }
     }
     
     if (isFolderUpload && createdFolders.size > 0) {
@@ -635,6 +719,21 @@ app.post('/api/folder', requireAuth, async (req, res) => {
     }
     
     await fs.mkdir(folderPath, { recursive: true });
+    
+    // Update cache
+    try {
+      const relativePath = path.relative(uploadsPath, folderPath);
+      const stats = await fs.stat(folderPath);
+      fileCache.addFile(relativePath, {
+        size: 0,
+        modified: stats.mtimeMs,
+        created: stats.birthtimeMs,
+        isDirectory: true
+      });
+    } catch (cacheErr) {
+      console.warn('Cache update failed for new folder:', name);
+    }
+    
     res.json({ success: true, message: 'Folder created successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -659,6 +758,13 @@ app.delete('/api/delete', requireAuth, async (req, res) => {
       await fs.unlink(fullPath);
     }
     
+    // Update cache (deleteFile handles recursive deletion for directories)
+    try {
+      fileCache.deleteFile(itemPath);
+    } catch (cacheErr) {
+      console.warn('Cache update failed for delete:', itemPath);
+    }
+    
     res.json({ success: true, message: 'Deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -677,6 +783,15 @@ app.post('/api/rename', requireAuth, async (req, res) => {
     }
     
     await fs.rename(oldPath, newPath);
+    
+    // Update cache (renameFile handles recursive path updates for directories)
+    try {
+      const newRelativePath = path.relative(uploadsPath, newPath);
+      fileCache.renameFile(itemPath, newRelativePath);
+    } catch (cacheErr) {
+      console.warn('Cache update failed for rename:', itemPath);
+    }
+    
     res.json({ success: true, message: 'Renamed successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -699,12 +814,14 @@ app.get('/api/download', requireAuth, async (req, res) => {
   }
 });
 
-// Search files
+// Search files with pagination
 app.get('/api/search', requireAuth, async (req, res) => {
   try {
     const query = req.query.q || '';
     const useRegex = req.query.regex === 'true';
-    const results = [];
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
+    const showHidden = req.query.showHidden === 'true';
     
     // Validate regex if enabled
     let regexPattern;
@@ -718,10 +835,41 @@ app.get('/api/search', requireAuth, async (req, res) => {
       }
     }
     
+    // Try cache first for non-regex searches
+    if (fileCache.isReady() && !useRegex) {
+      try {
+        const cacheResult = fileCache.searchFiles(query, useRegex, page, limit, showHidden);
+        if (cacheResult) {
+          return res.json({
+            results: cacheResult.results,
+            pagination: {
+              page,
+              limit,
+              total: cacheResult.total,
+              totalPages: Math.ceil(cacheResult.total / limit),
+              hasNext: page * limit < cacheResult.total,
+              hasPrev: page > 1
+            }
+          });
+        }
+      } catch (cacheError) {
+        console.error('Cache search error, falling back to filesystem:', cacheError.message);
+      }
+    }
+    
+    // Filesystem fallback (always used for regex)
+    const results = [];
+    
     async function searchDir(dirPath) {
       const items = await fs.readdir(dirPath, { withFileTypes: true });
       
       for (const item of items) {
+        // Skip symlinks
+        if (item.isSymbolicLink()) continue;
+        
+        // Skip hidden files if not showing them
+        if (!showHidden && item.name.startsWith('.')) continue;
+        
         const fullPath = path.join(dirPath, item.name);
         const relativePath = path.relative(uploadsPath, fullPath);
         
@@ -751,15 +899,49 @@ app.get('/api/search', requireAuth, async (req, res) => {
     }
     
     await searchDir(uploadsPath);
-    res.json({ results });
+    
+    // Sort results: directories first, then by name
+    results.sort((a, b) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+    
+    // Apply pagination
+    const total = results.length;
+    const offset = (page - 1) * limit;
+    const paginatedResults = results.slice(offset, offset + limit);
+    
+    res.json({ 
+      results: paginatedResults,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get storage info
+// Get storage info (uses cache for fast aggregation)
 app.get('/api/storage', requireAuth, async (req, res) => {
   try {
+    // Try cache first for instant results
+    if (fileCache.isReady()) {
+      try {
+        const storageInfo = fileCache.getStorageInfo();
+        return res.json(storageInfo);
+      } catch (cacheError) {
+        console.error('Cache storage info error, falling back to filesystem:', cacheError.message);
+      }
+    }
+    
+    // Filesystem fallback
     let totalSize = 0;
     let fileCount = 0;
     let folderCount = 0;
@@ -768,6 +950,9 @@ app.get('/api/storage', requireAuth, async (req, res) => {
       const items = await fs.readdir(dirPath, { withFileTypes: true });
       
       for (const item of items) {
+        // Skip symlinks
+        if (item.isSymbolicLink()) continue;
+        
         const fullPath = path.join(dirPath, item.name);
         
         if (item.isDirectory()) {
@@ -793,10 +978,38 @@ app.get('/api/storage', requireAuth, async (req, res) => {
   }
 });
 
+// Get cache status (admin only)
+app.get('/api/cache/status', requireAuth, requireAdmin, (req, res) => {
+  res.json(fileCache.getCacheStatus());
+});
+
+// Force cache rebuild (admin only)
+app.post('/api/cache/rebuild', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    if (!fileCache.isReady()) {
+      return res.status(503).json({ error: 'Cache not initialized' });
+    }
+    
+    // Run rebuild in background
+    fileCache.rebuildCache().then(() => {
+      console.log('✅ Manual cache rebuild completed');
+    }).catch(err => {
+      console.error('❌ Manual cache rebuild failed:', err.message);
+    });
+    
+    res.json({ 
+      success: true, 
+      message: 'Cache rebuild started in background' 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get app version and info
 app.get('/api/about', async (req, res) => {
   try {
-    const packageJsonPath = path.join(__dirname, 'package.json');
+    const packageJsonPath = path.join(__dirname, '..', 'package.json');
     const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
     
     res.json({
@@ -815,11 +1028,34 @@ app.get('/', (req, res) => {
   res.redirect('/admin');
 });
 
+// Graceful shutdown handling
+function gracefulShutdown(signal) {
+  console.log(`\n${signal} received, shutting down gracefully...`);
+  fileCache.close();
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 // Start server
 app.listen(PORT, async () => {
   console.log(`\n${'='.repeat(60)}`);
   console.log(`🚀 File Manager Server running on http://localhost:${PORT}`);
   console.log(`📋 Admin Panel: http://localhost:${PORT}/admin`);
   console.log(`📖 API Docs: http://localhost:${PORT}/api-docs`);
-  console.log(`${'='.repeat(60)}\n`);
+  console.log(`${'='.repeat(60)}`);
+  
+  // Initialize cache (non-blocking)
+  if (CACHE_ENABLED) {
+    fileCache.initializeCache(uploadsPath, {
+      dbPath: CACHE_DB_PATH,
+      syncInterval: CACHE_SYNC_INTERVAL,
+      enabled: CACHE_ENABLED
+    });
+  } else {
+    console.log('\n🗄️  Cache Status: Disabled');
+  }
+  
+  console.log('');
 });

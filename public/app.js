@@ -6,6 +6,14 @@ let selectedItems = new Set(); // For bulk delete
 let currentUser = null; // Store current user info
 let showHiddenFiles = localStorage.getItem('showHiddenFiles') === 'true'; // Hidden files visibility preference
 
+// Pagination state
+let paginationState = {
+  page: 1,
+  limit: parseInt(localStorage.getItem('itemsPerPage')) || 50,
+  total: 0,
+  totalPages: 0
+};
+
 // Custom modal callbacks
 let customAlertCallback = null;
 let customConfirmCallback = null;
@@ -147,19 +155,40 @@ function showApp(user) {
 }
 
 // File operations
-async function loadFiles(path = '') {
+async function loadFiles(path = '', resetPage = true) {
   currentPath = path;
+  
+  // Reset to page 1 when navigating to new directory
+  if (resetPage) {
+    paginationState.page = 1;
+  }
+  
   showLoading(true);
   
   try {
-    const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`, {
+    const params = new URLSearchParams({
+      path: path,
+      page: paginationState.page,
+      limit: paginationState.limit,
+      showHidden: showHiddenFiles
+    });
+    
+    const response = await fetch(`/api/files?${params}`, {
       credentials: 'include'
     });
     const data = await response.json();
     
     if (response.ok) {
+      // Update pagination state from response
+      if (data.pagination) {
+        paginationState.total = data.pagination.total;
+        paginationState.totalPages = data.pagination.totalPages;
+        paginationState.page = data.pagination.page;
+      }
+      
       renderFileList(data.items);
       renderBreadcrumb(path);
+      renderPagination(data.pagination);
     } else {
       // If authentication failed, redirect to login
       if (response.status === 401) {
@@ -664,16 +693,31 @@ async function searchFiles(query, useRegex = false) {
   showLoading(true);
   
   try {
-    const url = `/api/search?q=${encodeURIComponent(query)}&regex=${useRegex}`;
-    const response = await fetch(url, {
+    const params = new URLSearchParams({
+      q: query,
+      regex: useRegex,
+      page: paginationState.page,
+      limit: paginationState.limit,
+      showHidden: showHiddenFiles
+    });
+    
+    const response = await fetch(`/api/search?${params}`, {
       credentials: 'include'
     });
     const data = await response.json();
     
     if (response.ok) {
+      // Update pagination state if available
+      if (data.pagination) {
+        paginationState.total = data.pagination.total;
+        paginationState.totalPages = data.pagination.totalPages;
+        paginationState.page = data.pagination.page;
+      }
+      
       renderFileList(data.results);
       const searchType = useRegex ? ' (Regex)' : '';
       document.getElementById('breadcrumb').innerHTML = `<span class="breadcrumb-item active">🔍 Search results for "${query}"${searchType}</span>`;
+      renderPagination(data.pagination);
     } else {
       showAlert('alert', data.error || 'Search failed', 'error');
     }
@@ -682,6 +726,102 @@ async function searchFiles(query, useRegex = false) {
   } finally {
     showLoading(false);
   }
+}
+
+// Pagination functions
+function renderPagination(pagination) {
+  const controls = document.getElementById('paginationControls');
+  
+  if (!pagination || pagination.total === 0) {
+    controls.style.display = 'none';
+    return;
+  }
+  
+  controls.style.display = 'flex';
+  
+  // Update info text
+  const start = (pagination.page - 1) * pagination.limit + 1;
+  const end = Math.min(pagination.page * pagination.limit, pagination.total);
+  document.getElementById('paginationStart').textContent = start;
+  document.getElementById('paginationEnd').textContent = end;
+  document.getElementById('paginationTotal').textContent = pagination.total;
+  
+  // Update buttons
+  document.getElementById('prevPageBtn').disabled = !pagination.hasPrev;
+  document.getElementById('nextPageBtn').disabled = !pagination.hasNext;
+  
+  // Render page numbers
+  renderPageNumbers(pagination);
+  
+  // Update items per page select
+  document.getElementById('itemsPerPage').value = pagination.limit;
+}
+
+function renderPageNumbers(pagination) {
+  const container = document.getElementById('paginationPages');
+  const { page, totalPages } = pagination;
+  
+  if (totalPages <= 1) {
+    container.innerHTML = '';
+    return;
+  }
+  
+  let html = '';
+  const maxVisible = 5;
+  let startPage = Math.max(1, page - Math.floor(maxVisible / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+  
+  if (endPage - startPage < maxVisible - 1) {
+    startPage = Math.max(1, endPage - maxVisible + 1);
+  }
+  
+  // First page + ellipsis
+  if (startPage > 1) {
+    html += `<button class="btn btn-secondary" onclick="goToPage(1)">1</button>`;
+    if (startPage > 2) {
+      html += `<span class="ellipsis">...</span>`;
+    }
+  }
+  
+  // Page numbers
+  for (let i = startPage; i <= endPage; i++) {
+    const activeClass = i === page ? 'active' : '';
+    html += `<button class="btn btn-secondary ${activeClass}" onclick="goToPage(${i})">${i}</button>`;
+  }
+  
+  // Last page + ellipsis
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      html += `<span class="ellipsis">...</span>`;
+    }
+    html += `<button class="btn btn-secondary" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+  }
+  
+  container.innerHTML = html;
+}
+
+function goToPage(page) {
+  paginationState.page = page;
+  loadFiles(currentPath, false);
+}
+
+function nextPage() {
+  if (paginationState.page < paginationState.totalPages) {
+    goToPage(paginationState.page + 1);
+  }
+}
+
+function prevPage() {
+  if (paginationState.page > 1) {
+    goToPage(paginationState.page - 1);
+  }
+}
+
+function changeItemsPerPage(limit) {
+  paginationState.limit = parseInt(limit);
+  paginationState.page = 1; // Reset to first page
+  localStorage.setItem('itemsPerPage', limit);
+  loadFiles(currentPath, false);
 }
 
 // Storage info

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const CREDENTIALS_FILE = path.join(__dirname, 'credential.json');
+const CREDENTIALS_FILE = path.join(__dirname, '..', 'credential.json');
 
 // Initialize credentials file with admin from .env
 async function initializeCredentials() {

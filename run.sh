@@ -70,6 +70,12 @@ PORT=${PORT}
 SESSION_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 UPLOAD_DIR=uploads
 NODE_ENV=${NODE_ENV}
+
+# Cache Configuration
+CACHE_ENABLED=true
+CACHE_DB_PATH=./.cache/files.db
+CACHE_SYNC_INTERVAL_INTERNAL=600000
+CACHE_SYNC_INTERVAL_EXTERNAL=300000
 EOF
     print_message "✓ .env file created" "$GREEN"
 else
@@ -91,7 +97,7 @@ fi
 
 # Start the application with PM2
 print_message "🚀 Starting $APP_NAME with PM2..." "$BLUE"
-pm2 start server.js \
+pm2 start src/server.js \
     --name "$APP_NAME" \
     --node-args="--max-old-space-size=512" \
     --time \
