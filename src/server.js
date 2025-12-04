@@ -1009,12 +1009,77 @@ app.post('/api/folder', requireAuth, async (req, res) => {
   }
 });
 
+// Create new file
+app.post('/api/file', requireAuth, async (req, res) => {
+  try {
+    const { path: subPath, name, content, mediaAccessLevel } = req.body;
+    const accessLevel = mediaAccessLevel || 'public'; // Default to public
+    
+    if (!name) {
+      return res.status(400).json({ error: 'File name is required' });
+    }
+    
+    // Validate access level
+    if (!['public', 'private'].includes(accessLevel)) {
+      return res.status(400).json({
+        error: 'Invalid mediaAccessLevel. Must be "public" or "private"'
+      });
+    }
+    
+    // Sanitize filename - remove path separators and dangerous characters
+    const sanitizedName = name.replace(/[\/\\:*?"<>|]/g, '_');
+    const filePath = path.join(uploadsPath, subPath || '', sanitizedName);
+    
+    if (!filePath.startsWith(uploadsPath)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    // Check if file already exists
+    try {
+      await fs.access(filePath);
+      return res.status(409).json({ error: 'A file with this name already exists' });
+    } catch {
+      // File doesn't exist, continue
+    }
+    
+    // Ensure parent directory exists
+    const parentDir = path.dirname(filePath);
+    await fs.mkdir(parentDir, { recursive: true });
+    
+    // Write file with content (or empty string if no content)
+    await fs.writeFile(filePath, content || '', 'utf8');
+    
+    // Update cache with access level
+    try {
+      const relativePath = path.relative(uploadsPath, filePath);
+      const stats = await fs.stat(filePath);
+      fileCache.addFile(relativePath, {
+        size: stats.size,
+        modified: stats.mtimeMs,
+        created: stats.birthtimeMs,
+        isDirectory: false
+      }, accessLevel);
+    } catch (cacheErr) {
+      console.warn('Cache update failed for new file:', sanitizedName);
+    }
+    
+    res.json({
+      success: true,
+      message: 'File created successfully',
+      fileName: sanitizedName,
+      accessLevel
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Delete file or folder
 app.delete('/api/delete', requireAuth, async (req, res) => {
   try {
     const { path: itemPath } = req.body;
     const fullPath = path.join(uploadsPath, itemPath);
-    
+
     if (!fullPath.startsWith(uploadsPath) || fullPath === uploadsPath) {
       return res.status(403).json({ error: 'Access denied' });
     }

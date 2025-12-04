@@ -869,6 +869,82 @@ async function createFolder() {
   }
 }
 
+// Create file
+function openCreateFileModal() {
+  document.getElementById('createFileModal').classList.add('active');
+  document.getElementById('fileName').value = '';
+  document.getElementById('fileContent').value = '';
+  // Reset access level toggle to public (unchecked)
+  document.getElementById('fileAccessLevel').checked = false;
+  updateFileToggleText();
+  
+  // Focus on file name input
+  setTimeout(() => {
+    document.getElementById('fileName').focus();
+  }, 100);
+}
+
+function closeCreateFileModal() {
+  document.getElementById('createFileModal').classList.remove('active');
+  // Reset access level toggle
+  document.getElementById('fileAccessLevel').checked = false;
+  updateFileToggleText();
+}
+
+// Update file access level toggle text
+function updateFileToggleText() {
+  const checkbox = document.getElementById('fileAccessLevel');
+  const textSpan = document.getElementById('fileAccessText');
+  if (checkbox.checked) {
+    textSpan.textContent = 'Private';
+    textSpan.className = 'toggle-text private';
+  } else {
+    textSpan.textContent = 'Public';
+    textSpan.className = 'toggle-text public';
+  }
+}
+
+async function createFile() {
+  let name = document.getElementById('fileName').value.trim();
+  const content = document.getElementById('fileContent').value;
+  
+  if (!name) {
+    await customAlert('Please enter a file name', 'Missing File Name');
+    return;
+  }
+  
+  // Add .txt extension if no extension provided
+  if (!name.includes('.')) {
+    name += '.txt';
+  }
+  
+  // Get access level
+  const accessLevelCheckbox = document.getElementById('fileAccessLevel');
+  const accessLevel = accessLevelCheckbox && accessLevelCheckbox.checked ? 'private' : 'public';
+  
+  try {
+    const response = await fetch('/api/file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: currentPath, name, content, mediaAccessLevel: accessLevel }),
+      credentials: 'include'
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showAlert('alert', data.message, 'success');
+      closeCreateFileModal();
+      loadFiles(currentPath);
+      loadStorageInfo();
+    } else {
+      showAlert('alert', data.error || 'Failed to create file', 'error');
+    }
+  } catch (error) {
+    showAlert('alert', 'Failed to create file', 'error');
+  }
+}
+
 // Delete
 async function deleteItem(path, name) {
   const confirmed = await customConfirm(`Are you sure you want to delete "${name}"?`, 'Confirm Deletion');
