@@ -5,6 +5,8 @@ let renameTarget = null;
 let selectedItems = new Set(); // For bulk delete
 let currentUser = null; // Store current user info
 let showHiddenFiles = localStorage.getItem('showHiddenFiles') === 'true'; // Hidden files visibility preference
+let currentViewMode = localStorage.getItem('viewMode') || 'table'; // View mode: 'table' or 'grid'
+let currentItems = []; // Store current items for re-rendering on view change
 
 // Pagination state
 let paginationState = {
@@ -26,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
   checkAuth();
   setupEventListeners();
   updateHiddenFilesButton(); // Initialize hidden files button state
+  initViewMode(); // Initialize view mode from localStorage
   
   // Generate initial random password when user management modal is opened
   document.addEventListener('click', function(e) {
@@ -34,6 +37,78 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+// Initialize view mode
+function initViewMode() {
+  // Auto-switch to grid view on mobile devices
+  const isMobile = window.innerWidth <= 768;
+  const userHasSetPreference = localStorage.getItem('viewMode') !== null;
+  
+  // If mobile and user hasn't explicitly set a preference, default to grid
+  if (isMobile && !userHasSetPreference) {
+    currentViewMode = 'grid';
+  }
+  
+  applyViewMode(currentViewMode);
+  
+  // Listen for window resize to auto-switch on mobile
+  window.addEventListener('resize', handleResponsiveViewMode);
+}
+
+// Handle responsive view mode switching
+let resizeTimeout;
+function handleResponsiveViewMode() {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    const isMobile = window.innerWidth <= 768;
+    const userHasSetPreference = localStorage.getItem('viewMode') !== null;
+    
+    // Only auto-switch if user hasn't explicitly set a preference
+    if (!userHasSetPreference) {
+      const newMode = isMobile ? 'grid' : 'table';
+      if (newMode !== currentViewMode) {
+        currentViewMode = newMode;
+        applyViewMode(newMode);
+        if (currentItems.length > 0) {
+          renderFileList(currentItems);
+        }
+      }
+    }
+  }, 150);
+}
+
+// Apply view mode to UI
+function applyViewMode(mode) {
+  const tableBtn = document.getElementById('tableViewBtn');
+  const gridBtn = document.getElementById('gridViewBtn');
+  const tableView = document.getElementById('tableView');
+  const gridView = document.getElementById('gridView');
+  
+  if (mode === 'grid') {
+    tableBtn.classList.remove('active');
+    gridBtn.classList.add('active');
+    if (tableView) tableView.style.display = 'none';
+    if (gridView) gridView.style.display = 'grid';
+  } else {
+    tableBtn.classList.add('active');
+    gridBtn.classList.remove('active');
+    if (tableView) tableView.style.display = 'block';
+    if (gridView) gridView.style.display = 'none';
+  }
+}
+
+// Set view mode (called when user clicks toggle)
+function setViewMode(mode) {
+  currentViewMode = mode;
+  localStorage.setItem('viewMode', mode); // Save user preference
+  
+  applyViewMode(mode);
+  
+  // Re-render with current items
+  if (currentItems.length > 0) {
+    renderFileList(currentItems);
+  }
+}
 
 // Setup event listeners
 function setupEventListeners() {
@@ -209,8 +284,13 @@ async function loadFiles(path = '', resetPage = true) {
 
 function renderFileList(items) {
   const tbody = document.getElementById('fileTableBody');
+  const gridView = document.getElementById('gridView');
+  const tableView = document.getElementById('tableView');
   const emptyState = document.getElementById('emptyState');
   const fileTable = document.getElementById('fileTable');
+  
+  // Store items for view switching
+  currentItems = items;
   
   // Clear selections when rendering new list
   selectedItems.clear();
@@ -224,12 +304,29 @@ function renderFileList(items) {
   
   if (filteredItems.length === 0) {
     fileTable.style.display = 'none';
+    if (gridView) gridView.style.display = 'none';
     emptyState.style.display = 'block';
     return;
   }
   
-  fileTable.style.display = 'table';
   emptyState.style.display = 'none';
+  
+  // Render based on current view mode
+  if (currentViewMode === 'grid') {
+    if (tableView) tableView.style.display = 'none';
+    if (gridView) gridView.style.display = 'grid';
+    renderGridView(filteredItems);
+  } else {
+    if (tableView) tableView.style.display = 'block';
+    if (gridView) gridView.style.display = 'none';
+    fileTable.style.display = 'table';
+    renderTableView(filteredItems);
+  }
+}
+
+// Render table view
+function renderTableView(filteredItems) {
+  const tbody = document.getElementById('fileTableBody');
   
   tbody.innerHTML = filteredItems.map(item => {
     const thumbnail = getFileThumbnail(item.name, item.path, item.isDirectory, item.thumbnailUrl);
@@ -270,6 +367,145 @@ function renderFileList(items) {
       </tr>
     `;
   }).join('');
+}
+
+// Render grid view
+function renderGridView(filteredItems) {
+  const gridView = document.getElementById('gridView');
+  
+  gridView.innerHTML = filteredItems.map(item => {
+    const thumbnail = getGridThumbnail(item.name, item.path, item.isDirectory, item.thumbnailUrl);
+    const size = item.isDirectory ? '' : formatFileSize(item.size);
+    const escapedPath = item.path.replace(/'/g, "\\'");
+    const escapedName = item.name.replace(/'/g, "\\'");
+    const isPrivate = item.accessLevel === 'private';
+    
+    return `
+      <div class="grid-item ${selectedItems.has(item.path) ? 'selected' : ''}" 
+           id="grid-${btoa(item.path)}"
+           onclick="handleGridItemClick(event, '${escapedPath}', ${item.isDirectory})">
+        <input type="checkbox" 
+               class="grid-item-checkbox item-checkbox" 
+               data-path="${escapedPath}" 
+               data-name="${escapedName}"
+               onclick="event.stopPropagation()"
+               onchange="toggleGridItemSelection(this)"
+               ${selectedItems.has(item.path) ? 'checked' : ''}>
+        ${isPrivate ? '<span class="grid-item-private">🔒</span>' : ''}
+        <div class="grid-item-actions" onclick="event.stopPropagation()">
+          ${!item.isDirectory ? `<button class="icon-btn" onclick="downloadFile('${escapedPath}')" title="Download">⬇️</button>` : ''}
+          <button class="icon-btn" onclick="openRenameModal('${escapedPath}', '${escapedName}')" title="Rename">✏️</button>
+          <button class="icon-btn" onclick="toggleAccessLevel('${escapedPath}', '${isPrivate ? 'public' : 'private'}')" title="${isPrivate ? 'Make Public' : 'Make Private'}">${isPrivate ? '🔓' : '🔒'}</button>
+          <button class="icon-btn danger" onclick="deleteItem('${escapedPath}', '${escapedName}')" title="Delete">🗑️</button>
+        </div>
+        <div class="grid-item-thumbnail">
+          ${thumbnail}
+        </div>
+        <div class="grid-item-name" title="${item.name}">${item.name}</div>
+        ${size ? `<div class="grid-item-meta">${size}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+// Get thumbnail for grid view (larger icons)
+function getGridThumbnail(filename, filepath, isDirectory, thumbnailUrl = null) {
+  if (isDirectory) {
+    return `<div class="file-type-icon icon-folder">📁</div>`;
+  }
+  
+  const ext = filename.split('.').pop().toLowerCase();
+  
+  // Check if it's an image - use thumbnail if available
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tiff', 'tif'];
+  if (imageExtensions.includes(ext)) {
+    const imgSrc = thumbnailUrl || `/${filepath}`;
+    return `<img src="${imgSrc}" alt="${filename}" onerror="this.parentElement.innerHTML='<div class=\\'file-type-icon icon-default\\'>IMG</div>'">`;
+  }
+  
+  // File type configurations
+  const fileTypes = {
+    pdf: { class: 'icon-pdf', text: 'PDF' },
+    doc: { class: 'icon-doc', text: 'DOC' },
+    docx: { class: 'icon-doc', text: 'DOC' },
+    txt: { class: 'icon-txt', text: 'TXT' },
+    md: { class: 'icon-txt', text: 'MD' },
+    rtf: { class: 'icon-doc', text: 'RTF' },
+    xls: { class: 'icon-xls', text: 'XLS' },
+    xlsx: { class: 'icon-xls', text: 'XLS' },
+    csv: { class: 'icon-xls', text: 'CSV' },
+    ppt: { class: 'icon-ppt', text: 'PPT' },
+    pptx: { class: 'icon-ppt', text: 'PPT' },
+    zip: { class: 'icon-zip', text: 'ZIP' },
+    rar: { class: 'icon-zip', text: 'RAR' },
+    tar: { class: 'icon-zip', text: 'TAR' },
+    gz: { class: 'icon-zip', text: 'GZ' },
+    '7z': { class: 'icon-zip', text: '7Z' },
+    js: { class: 'icon-code', text: 'JS' },
+    ts: { class: 'icon-code', text: 'TS' },
+    jsx: { class: 'icon-code', text: 'JSX' },
+    tsx: { class: 'icon-code', text: 'TSX' },
+    html: { class: 'icon-code', text: 'HTML' },
+    css: { class: 'icon-code', text: 'CSS' },
+    scss: { class: 'icon-code', text: 'SCSS' },
+    json: { class: 'icon-code', text: 'JSON' },
+    xml: { class: 'icon-code', text: 'XML' },
+    py: { class: 'icon-code', text: 'PY' },
+    java: { class: 'icon-code', text: 'JAVA' },
+    cpp: { class: 'icon-code', text: 'CPP' },
+    c: { class: 'icon-code', text: 'C' },
+    php: { class: 'icon-code', text: 'PHP' },
+    rb: { class: 'icon-code', text: 'RB' },
+    go: { class: 'icon-code', text: 'GO' },
+    rs: { class: 'icon-code', text: 'RS' },
+    mp4: { class: 'icon-video', text: 'MP4' },
+    avi: { class: 'icon-video', text: 'AVI' },
+    mov: { class: 'icon-video', text: 'MOV' },
+    mkv: { class: 'icon-video', text: 'MKV' },
+    wmv: { class: 'icon-video', text: 'WMV' },
+    flv: { class: 'icon-video', text: 'FLV' },
+    mp3: { class: 'icon-audio', text: 'MP3' },
+    wav: { class: 'icon-audio', text: 'WAV' },
+    flac: { class: 'icon-audio', text: 'FLAC' },
+    aac: { class: 'icon-audio', text: 'AAC' },
+    ogg: { class: 'icon-audio', text: 'OGG' },
+    m4a: { class: 'icon-audio', text: 'M4A' }
+  };
+  
+  const fileType = fileTypes[ext] || { class: 'icon-default', text: ext.toUpperCase().substring(0, 4) };
+  
+  return `<div class="file-type-icon ${fileType.class}">${fileType.text}</div>`;
+}
+
+// Handle grid item click
+function handleGridItemClick(event, path, isDirectory) {
+  // Don't navigate if clicking checkbox or actions
+  if (event.target.closest('.grid-item-checkbox') || event.target.closest('.grid-item-actions')) {
+    return;
+  }
+  
+  if (isDirectory) {
+    loadFiles(path);
+  } else {
+    window.open('/' + path, '_blank');
+  }
+}
+
+// Toggle grid item selection
+function toggleGridItemSelection(checkbox) {
+  const path = checkbox.getAttribute('data-path');
+  const gridItem = checkbox.closest('.grid-item');
+  
+  if (checkbox.checked) {
+    selectedItems.add(path);
+    gridItem.classList.add('selected');
+  } else {
+    selectedItems.delete(path);
+    gridItem.classList.remove('selected');
+  }
+  
+  updateBulkDeleteButton();
+  updateSelectAllCheckbox();
 }
 
 function renderBreadcrumb(path) {
@@ -935,11 +1171,14 @@ function toggleItemSelection(checkbox) {
   
   if (checkbox.checked) {
     selectedItems.add(path);
-    row.classList.add('selected');
+    if (row) row.classList.add('selected');
   } else {
     selectedItems.delete(path);
-    row.classList.remove('selected');
+    if (row) row.classList.remove('selected');
   }
+  
+  // Also update grid view if visible
+  syncSelectionBetweenViews(path, checkbox.checked);
   
   updateBulkDeleteButton();
   updateSelectAllCheckbox();
@@ -952,17 +1191,51 @@ function toggleSelectAll(checkbox) {
     itemCheckbox.checked = checkbox.checked;
     const path = itemCheckbox.getAttribute('data-path');
     const row = itemCheckbox.closest('tr');
+    const gridItem = itemCheckbox.closest('.grid-item');
     
     if (checkbox.checked) {
       selectedItems.add(path);
-      row.classList.add('selected');
+      if (row) row.classList.add('selected');
+      if (gridItem) gridItem.classList.add('selected');
     } else {
       selectedItems.delete(path);
-      row.classList.remove('selected');
+      if (row) row.classList.remove('selected');
+      if (gridItem) gridItem.classList.remove('selected');
     }
   });
   
   updateBulkDeleteButton();
+}
+
+// Sync selection state between table and grid views
+function syncSelectionBetweenViews(path, isSelected) {
+  // Sync to grid view
+  const gridCheckbox = document.querySelector(`.grid-item-checkbox[data-path="${path.replace(/'/g, "\\'")}"]`);
+  if (gridCheckbox && gridCheckbox.checked !== isSelected) {
+    gridCheckbox.checked = isSelected;
+    const gridItem = gridCheckbox.closest('.grid-item');
+    if (gridItem) {
+      if (isSelected) {
+        gridItem.classList.add('selected');
+      } else {
+        gridItem.classList.remove('selected');
+      }
+    }
+  }
+  
+  // Sync to table view
+  const tableCheckbox = document.querySelector(`tr .item-checkbox[data-path="${path.replace(/'/g, "\\'")}"]`);
+  if (tableCheckbox && tableCheckbox.checked !== isSelected) {
+    tableCheckbox.checked = isSelected;
+    const row = tableCheckbox.closest('tr');
+    if (row) {
+      if (isSelected) {
+        row.classList.add('selected');
+      } else {
+        row.classList.remove('selected');
+      }
+    }
+  }
 }
 
 function updateSelectAllCheckbox() {
@@ -1066,6 +1339,8 @@ async function bulkDelete() {
 function showLoading(show) {
   const loading = document.getElementById('loading');
   const content = document.getElementById('fileListContent');
+  const tableView = document.getElementById('tableView');
+  const gridView = document.getElementById('gridView');
   
   if (show) {
     loading.classList.add('active');
@@ -1073,6 +1348,15 @@ function showLoading(show) {
   } else {
     loading.classList.remove('active');
     content.style.display = 'block';
+    
+    // Show appropriate view based on current mode
+    if (currentViewMode === 'grid') {
+      if (tableView) tableView.style.display = 'none';
+      if (gridView) gridView.style.display = 'grid';
+    } else {
+      if (tableView) tableView.style.display = 'block';
+      if (gridView) gridView.style.display = 'none';
+    }
   }
 }
 

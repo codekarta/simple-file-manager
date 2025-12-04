@@ -111,9 +111,17 @@ if (!existsSync(uploadsPath)) {
 // Initialize thumbnail generator
 thumbnailGenerator.initialize(uploadsPath);
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Middleware - explicitly specify content types to avoid parsing multipart as JSON
+app.use(express.json({ limit: '50mb', type: 'application/json' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Handle JSON parsing errors gracefully
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON in request body' });
+  }
+  next(err);
+});
 
 // Session configuration with proper cookie settings
 app.use(session({
