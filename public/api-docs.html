@@ -480,6 +480,11 @@
     <div class="docs-content">
       <h1>📖 API Documentation</h1>
       <p>Complete guide for programmatic access to the File Manager API. This API allows you to integrate file management into your applications, scripts, and automation workflows.</p>
+      
+      <div class="alert alert-info">
+        <strong>🤖 LLM-Friendly Documentation:</strong>
+        <p>For AI/LLM integrations, use our structured markdown documentation: <a href="/llms.md" target="_blank" style="color: inherit; font-weight: 600;">/llms.md</a></p>
+      </div>
 
       <!-- Table of Contents -->
       <div class="toc">
@@ -495,6 +500,9 @@
           <li><a href="#file-endpoints">File & Folder Operations</a></li>
           <li><a href="#user-endpoints">User Management</a></li>
           <li><a href="#admin-endpoints">Admin Endpoints</a></li>
+          <li><a href="#cache-endpoints">Cache Management (Admin)</a></li>
+          <li><a href="#thumbnail-endpoints">Thumbnail Management</a></li>
+          <li><a href="#system-endpoints">System Information</a></li>
           <li><a href="#search-endpoints">Search & Storage</a></li>
           <li><a href="#examples">Complete Examples</a></li>
           <li><a href="#errors">Error Responses</a></li>
@@ -620,19 +628,58 @@
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="badge badge-get">GET</span>
-          <span class="endpoint-path">/api/files?path={folder_path}</span>
+          <span class="endpoint-path">/api/files</span>
         </div>
-        <p class="endpoint-description">List files and folders in a directory</p>
+        <p class="endpoint-description">List files and folders in a directory with pagination support</p>
+        
+        <h4>Query Parameters</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Parameter</th>
+              <th>Type</th>
+              <th>Default</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>path</code></td>
+              <td>string</td>
+              <td>""</td>
+              <td>Directory path relative to uploads root</td>
+            </tr>
+            <tr>
+              <td><code>page</code></td>
+              <td>number</td>
+              <td>1</td>
+              <td>Page number (1-based)</td>
+            </tr>
+            <tr>
+              <td><code>limit</code></td>
+              <td>number</td>
+              <td>50</td>
+              <td>Items per page (max 500)</td>
+            </tr>
+            <tr>
+              <td><code>showHidden</code></td>
+              <td>boolean</td>
+              <td>false</td>
+              <td>Include hidden files (starting with .)</td>
+            </tr>
+          </tbody>
+        </table>
+
         <p><strong>Example:</strong></p>
         <pre><code># List root directory
 curl -b cookies.txt "http://localhost:3000/api/files"
 
-# List specific folder
-curl -b cookies.txt "http://localhost:3000/api/files?path=products"
+# List specific folder with pagination
+curl -b cookies.txt "http://localhost:3000/api/files?path=products&page=1&limit=20"
 
-# With API token
+# Include hidden files
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-  "http://localhost:3000/api/files?path=products"</code></pre>
+  "http://localhost:3000/api/files?path=products&showHidden=true"</code></pre>
         <p><strong>Response:</strong></p>
         <pre><code>{
   "currentPath": "products",
@@ -643,10 +690,23 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
       "isDirectory": false,
       "size": 245678,
       "modified": "2024-10-09T10:30:00.000Z",
-      "created": "2024-10-08T14:20:00.000Z"
+      "created": "2024-10-08T14:20:00.000Z",
+      "accessLevel": "public",
+      "thumbnailUrl": "/thumb/products/tshirt.webp"
     }
-  ]
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 50,
+    "total": 125,
+    "totalPages": 3,
+    "hasNext": true,
+    "hasPrev": false
+  }
 }</code></pre>
+        <div class="alert alert-info">
+          <strong>📸 Thumbnails:</strong> For image files (jpg, png, gif, webp), a <code>thumbnailUrl</code> field is included pointing to a 300x300 WebP thumbnail. Access thumbnails at <code>/thumb/{path}</code>. For non-image files and directories, <code>thumbnailUrl</code> is <code>null</code>.
+        </div>
       </div>
 
       <div class="endpoint">
@@ -654,22 +714,51 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
           <span class="badge badge-post">POST</span>
           <span class="endpoint-path">/api/upload</span>
         </div>
-        <p class="endpoint-description">Upload one or more files</p>
-        <p><strong>Example - Single file:</strong></p>
+        <p class="endpoint-description">Upload one or more files with optional access level control</p>
+        
+        <h4>Form Fields</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>files</code></td>
+              <td>File[]</td>
+              <td>Files to upload (max 500 files, 100MB each)</td>
+            </tr>
+            <tr>
+              <td><code>basePath</code></td>
+              <td>string</td>
+              <td>Target directory path</td>
+            </tr>
+            <tr>
+              <td><code>mediaAccessLevel</code></td>
+              <td>string</td>
+              <td>Access level: "public" (default) or "private"</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <p><strong>Example - Upload public file:</strong></p>
         <pre><code>curl -b cookies.txt -X POST http://localhost:3000/api/upload \
   -F "basePath=products" \
   -F "files=@/path/to/image.jpg"</code></pre>
-        <p><strong>Example - Multiple files:</strong></p>
+        <p><strong>Example - Upload private file:</strong></p>
         <pre><code>curl -b cookies.txt -X POST http://localhost:3000/api/upload \
-  -F "basePath=products" \
-  -F "files=@image1.jpg" \
-  -F "files=@image2.jpg" \
-  -F "files=@image3.jpg"</code></pre>
+  -F "basePath=documents" \
+  -F "files=@secret.pdf" \
+  -F "mediaAccessLevel=private"</code></pre>
         <p><strong>With API token:</strong></p>
         <pre><code>curl -H "Authorization: Bearer YOUR_TOKEN" \
   -X POST http://localhost:3000/api/upload \
   -F "basePath=products" \
-  -F "files=@image.jpg"</code></pre>
+  -F "files=@image.jpg" \
+  -F "mediaAccessLevel=public"</code></pre>
       </div>
 
       <div class="endpoint">
@@ -677,16 +766,27 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
           <span class="badge badge-post">POST</span>
           <span class="endpoint-path">/api/folder</span>
         </div>
-        <p class="endpoint-description">Create a new folder</p>
+        <p class="endpoint-description">Create a new folder with optional access level control</p>
         <p><strong>Request Body:</strong></p>
         <pre><code>{
   "path": "products",
-  "name": "new-folder"
+  "name": "new-folder",
+  "mediaAccessLevel": "public"  // Optional: "public" (default) or "private"
 }</code></pre>
-        <p><strong>Example:</strong></p>
+        <p><strong>Example - Create public folder:</strong></p>
         <pre><code>curl -b cookies.txt -X POST http://localhost:3000/api/folder \
   -H "Content-Type: application/json" \
   -d '{"path":"","name":"documents"}'</code></pre>
+        <p><strong>Example - Create private folder:</strong></p>
+        <pre><code>curl -b cookies.txt -X POST http://localhost:3000/api/folder \
+  -H "Content-Type: application/json" \
+  -d '{"path":"","name":"confidential","mediaAccessLevel":"private"}'</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "success": true,
+  "message": "Folder created successfully",
+  "accessLevel": "public"
+}</code></pre>
       </div>
 
       <div class="endpoint">
@@ -727,6 +827,34 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
         <p><strong>Example:</strong></p>
         <pre><code>curl -b cookies.txt "http://localhost:3000/api/download?path=products/image.jpg" \
   -o downloaded-image.jpg</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/access-level</span>
+        </div>
+        <p class="endpoint-description">Change the access level of a file or folder</p>
+        <p><strong>Request Body:</strong></p>
+        <pre><code>{
+  "path": "documents/secret.pdf",
+  "accessLevel": "private"  // "public" or "private"
+}</code></pre>
+        <p><strong>Example - Make file private:</strong></p>
+        <pre><code>curl -H "Authorization: Bearer YOUR_TOKEN" \
+  -X POST http://localhost:3000/api/access-level \
+  -H "Content-Type: application/json" \
+  -d '{"path":"documents/secret.pdf","accessLevel":"private"}'</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "success": true,
+  "message": "Access level updated to private",
+  "path": "documents/secret.pdf",
+  "accessLevel": "private"
+}</code></pre>
+        <div class="alert alert-info">
+          <strong>📝 Note:</strong> Private files require authentication (session or API token) to access via direct URL. Children inherit access level from parent folders.
+        </div>
       </div>
 
       <!-- User Management -->
@@ -868,17 +996,266 @@ curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
         <p><strong>Note:</strong> Admins cannot delete their own account.</p>
       </div>
 
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/admin/users/{username}/reset-password</span>
+        </div>
+        <p class="endpoint-description">Reset a user's password (admin only)</p>
+        <p><strong>Request Body (optional):</strong></p>
+        <pre><code>{
+  "customPassword": "NewSecurePassword123"
+}</code></pre>
+        <p><strong>Example - Auto-generated password:</strong></p>
+        <pre><code>curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -X POST http://localhost:3000/api/admin/users/john/reset-password \
+  -H "Content-Type: application/json" \
+  -d '{}'</code></pre>
+        <p><strong>Response (auto-generated):</strong></p>
+        <pre><code>{
+  "success": true,
+  "message": "Password reset successfully",
+  "newPassword": "auto_generated_password_xyz"
+}</code></pre>
+        <p><strong>Example - Custom password:</strong></p>
+        <pre><code>curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -X POST http://localhost:3000/api/admin/users/john/reset-password \
+  -H "Content-Type: application/json" \
+  -d '{"customPassword":"NewSecurePass123"}'</code></pre>
+        <p><strong>Response (custom):</strong></p>
+        <pre><code>{
+  "success": true,
+  "message": "Password reset successfully"
+}</code></pre>
+        <div class="alert alert-warning">
+          <strong>⚠️ Note:</strong> Admins cannot reset their own password. Use the change password feature instead. Custom password must be at least 8 characters.
+        </div>
+      </div>
+
+      <!-- Cache Management -->
+      <h2 id="cache-endpoints">🗄️ Cache Management (Admin Only)</h2>
+      <p>These endpoints manage the SQLite file cache for improved performance.</p>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-get">GET</span>
+          <span class="endpoint-path">/api/cache/status</span>
+        </div>
+        <p class="endpoint-description">Get cache status and statistics</p>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "enabled": true,
+  "ready": true,
+  "totalFiles": 1250,
+  "totalDirectories": 45,
+  "totalSize": 157286400,
+  "lastSync": "2025-01-15T10:30:00.000Z",
+  "syncInProgress": false,
+  "syncInterval": 600000,
+  "databasePath": "./.cache/files.db",
+  "databaseSize": 524288
+}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/cache/rebuild</span>
+        </div>
+        <p class="endpoint-description">Force cache rebuild (runs in background)</p>
+        <p><strong>Example:</strong></p>
+        <pre><code>curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -X POST http://localhost:3000/api/cache/rebuild</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "success": true,
+  "message": "Cache rebuild started in background"
+}</code></pre>
+      </div>
+
+      <!-- Thumbnail Management -->
+      <h2 id="thumbnail-endpoints">📸 Thumbnail Management</h2>
+      <p>Thumbnails are automatically generated for uploaded images (jpg, jpeg, png, gif, webp, tiff, bmp) and stored in a <code>.thumbnail</code> directory with the same path hierarchy as uploads. Thumbnails are 300x300 WebP images.</p>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-get">GET</span>
+          <span class="endpoint-path">/thumb/{path}</span>
+        </div>
+        <p class="endpoint-description">Access thumbnail for an image file</p>
+        <p><strong>Example:</strong></p>
+        <pre><code># Access thumbnail for an image
+curl "http://localhost:3000/thumb/products/tshirt.webp"
+
+# For private images, authentication is required
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  "http://localhost:3000/thumb/private/photo.webp"</code></pre>
+        <p><strong>Response:</strong> WebP image file (300x300 max, aspect ratio preserved)</p>
+        <div class="alert alert-warning">
+          <strong>Access Control:</strong> Thumbnails inherit the access level of the original image. Private images require authentication to access their thumbnails.
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-get">GET</span>
+          <span class="endpoint-path">/api/thumbnails/status</span>
+        </div>
+        <p class="endpoint-description">Get thumbnail generator status and configuration</p>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "initialized": true,
+  "uploadsPath": "/path/to/uploads",
+  "thumbnailBasePath": "/path/to/.thumbnail",
+  "thumbnailSize": 300,
+  "thumbnailFormat": "webp",
+  "thumbnailQuality": 80,
+  "supportedExtensions": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".tiff", ".tif", ".bmp"]
+}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/thumbnails/generate</span>
+        </div>
+        <p class="endpoint-description">Generate thumbnails for all existing images (Admin only, runs in background)</p>
+        <p><strong>Example:</strong></p>
+        <pre><code>curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -X POST http://localhost:3000/api/thumbnails/generate</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "success": true,
+  "message": "Thumbnail generation started in background"
+}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-post">POST</span>
+          <span class="endpoint-path">/api/thumbnails/sync</span>
+        </div>
+        <p class="endpoint-description">Sync thumbnails - generates missing and removes orphaned thumbnails (Admin only, runs in background)</p>
+        <p><strong>Example:</strong></p>
+        <pre><code>curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -X POST http://localhost:3000/api/thumbnails/sync</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "success": true,
+  "message": "Thumbnail sync started in background"
+}</code></pre>
+        <div class="alert alert-info">
+          <strong>Automatic Sync:</strong> Thumbnails are also synced automatically during the periodic cache sync, ensuring external file changes are reflected.
+        </div>
+      </div>
+
+      <!-- System Info -->
+      <h2 id="system-endpoints">ℹ️ System Information</h2>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge badge-get">GET</span>
+          <span class="endpoint-path">/api/about</span>
+        </div>
+        <p class="endpoint-description">Get application version and information (no authentication required)</p>
+        <p><strong>Example:</strong></p>
+        <pre><code>curl http://localhost:3000/api/about</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "version": "1.0.0",
+  "name": "simple-file-manage",
+  "description": "A simple file management server",
+  "license": "MIT"
+}</code></pre>
+      </div>
+
       <!-- Search & Storage -->
       <h2 id="search-endpoints">🔍 Search & Storage</h2>
 
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="badge badge-get">GET</span>
-          <span class="endpoint-path">/api/search?q={query}</span>
+          <span class="endpoint-path">/api/search</span>
         </div>
-        <p class="endpoint-description">Search for files and folders</p>
+        <p class="endpoint-description">Search for files and folders with pagination and optional regex support</p>
+        
+        <h4>Query Parameters</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Parameter</th>
+              <th>Type</th>
+              <th>Default</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>q</code></td>
+              <td>string</td>
+              <td>""</td>
+              <td>Search query</td>
+            </tr>
+            <tr>
+              <td><code>regex</code></td>
+              <td>boolean</td>
+              <td>false</td>
+              <td>Enable regex pattern matching</td>
+            </tr>
+            <tr>
+              <td><code>page</code></td>
+              <td>number</td>
+              <td>1</td>
+              <td>Page number (1-based)</td>
+            </tr>
+            <tr>
+              <td><code>limit</code></td>
+              <td>number</td>
+              <td>50</td>
+              <td>Items per page (max 500)</td>
+            </tr>
+            <tr>
+              <td><code>showHidden</code></td>
+              <td>boolean</td>
+              <td>false</td>
+              <td>Include hidden files</td>
+            </tr>
+          </tbody>
+        </table>
+
         <p><strong>Example:</strong></p>
-        <pre><code>curl -b cookies.txt "http://localhost:3000/api/search?q=tshirt"</code></pre>
+        <pre><code># Simple search
+curl -b cookies.txt "http://localhost:3000/api/search?q=tshirt"
+
+# Search with pagination
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  "http://localhost:3000/api/search?q=image&page=1&limit=20"
+
+# Regex search (find all .jpg files)
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  "http://localhost:3000/api/search?q=.*\.jpg$&regex=true"</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "results": [
+    {
+      "name": "tshirt-red.jpg",
+      "path": "products/tshirt-red.jpg",
+      "isDirectory": false,
+      "size": 245678,
+      "modified": "2024-10-09T10:30:00.000Z",
+      "accessLevel": "public",
+      "thumbnailUrl": "/thumb/products/tshirt-red.webp"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 50,
+    "total": 15,
+    "totalPages": 1,
+    "hasNext": false,
+    "hasPrev": false
+  }
+}</code></pre>
       </div>
 
       <div class="endpoint">

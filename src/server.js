@@ -4,11 +4,12 @@ import multer from 'multer';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs/promises';
-import { existsSync, statSync } from 'fs';
+import { existsSync, statSync, createReadStream } from 'fs';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import * as credentialsManager from './credentials-manager.js';
 import * as fileCache from './file-cache.js';
+import * as thumbnailGenerator from './thumbnail-generator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -107,6 +108,9 @@ if (!existsSync(uploadsPath)) {
   console.log(`   Status: ✓ Directory exists`);
 }
 
+// Initialize thumbnail generator
+thumbnailGenerator.initialize(uploadsPath);
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -140,6 +144,124 @@ const upload = multer({
   limits: { 
     fileSize: 100 * 1024 * 1024, // 100MB per file
     files: 500
+  }
+});
+
+// Thumbnail serving middleware with access control
+app.use('/thumb', async (req, res, next) => {
+  const decodedPath = decodeURIComponent(req.path);
+  const relativePath = decodedPath.startsWith('/') ? decodedPath.slice(1) : decodedPath;
+  const thumbnailBasePath = thumbnailGenerator.getThumbnailBasePath();
+  
+  if (!thumbnailBasePath) {
+    return res.status(503).json({ error: 'Thumbnail service not initialized' });
+  }
+  
+  const fullPath = path.join(thumbnailBasePath, relativePath);
+  
+  // Security check: prevent directory traversal
+  if (!fullPath.startsWith(thumbnailBasePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  
+  // Check if thumbnail exists
+  if (!existsSync(fullPath)) {
+    console.log(`Thumbnail not found: ${fullPath}`);
+    return res.status(404).json({ error: 'Thumbnail not found', path: relativePath });
+  }
+  
+  // Find the original file path to check access level
+  // Thumbnail is name.webp, need to find original (name.jpg, name.png, etc.)
+  const thumbnailDir = path.dirname(relativePath);
+  const thumbnailBasename = path.basename(relativePath, '.webp');
+  
+  // Try to find the original file to check its access level
+  let originalRelativePath = null;
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif', '.bmp'];
+  
+  for (const ext of imageExtensions) {
+    const possiblePath = thumbnailDir ? `${thumbnailDir}/${thumbnailBasename}${ext}` : `${thumbnailBasename}${ext}`;
+    const possibleFullPath = path.join(uploadsPath, possiblePath);
+    if (existsSync(possibleFullPath)) {
+      originalRelativePath = possiblePath;
+      break;
+    }
+  }
+  
+  // Check access level of original file (if found)
+  let accessLevel = 'public';
+  if (originalRelativePath && fileCache.isReady()) {
+    try {
+      accessLevel = fileCache.getAccessLevel(originalRelativePath);
+    } catch (e) {
+      // Default to public if cache fails
+    }
+  }
+  
+  // If private, check authentication
+  if (accessLevel === 'private') {
+    let isAuthenticated = false;
+    
+    // Check session authentication
+    if (req.session && req.session.authenticated) {
+      isAuthenticated = true;
+    }
+    
+    // Check for API token in query parameter
+    if (!isAuthenticated && (req.query.apiKey || req.query.api_key)) {
+      const apiKey = req.query.apiKey || req.query.api_key;
+      try {
+        const user = await credentialsManager.getUserByApiKey(apiKey);
+        if (user) {
+          isAuthenticated = true;
+        }
+      } catch (e) {
+        // Ignore auth errors
+      }
+    }
+    
+    // Check for API token in Authorization header
+    if (!isAuthenticated) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const apiKey = authHeader.substring(7);
+        try {
+          const user = await credentialsManager.getUserByApiKey(apiKey);
+          if (user) {
+            isAuthenticated = true;
+          }
+        } catch (e) {
+          // Ignore auth errors
+        }
+      }
+    }
+    
+    if (!isAuthenticated) {
+      return res.status(401).json({ 
+        error: 'Authentication required',
+        message: 'This thumbnail is private. Please provide a valid session or API token.'
+      });
+    }
+  }
+  
+  // Serve the thumbnail using stream (more reliable than sendFile)
+  try {
+    const stat = statSync(fullPath);
+    res.setHeader('Content-Type', 'image/webp');
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    
+    const readStream = createReadStream(fullPath);
+    readStream.on('error', (err) => {
+      console.error('Error streaming thumbnail:', fullPath, err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to serve thumbnail' });
+      }
+    });
+    readStream.pipe(res);
+  } catch (err) {
+    console.error('Error serving thumbnail:', fullPath, err.message);
+    res.status(500).json({ error: 'Failed to serve thumbnail' });
   }
 });
 
@@ -201,8 +323,90 @@ const requireAdmin = async (req, res, next) => {
   }
 };
 
-// Serve static files publicly
-app.use(express.static(uploadsPath));
+// Auth-aware static file middleware for public/private access control
+// Public files: accessible to everyone
+// Private files: require session or API token authentication
+app.use(async (req, res, next) => {
+  // Skip API routes, admin routes, and thumbnail routes
+  if (req.path.startsWith('/api') || req.path.startsWith('/admin') || req.path.startsWith('/thumb') || req.path === '/api-docs' || req.path === '/llms.md') {
+    return next();
+  }
+  
+  // Decode URL-encoded path
+  const decodedPath = decodeURIComponent(req.path);
+  const relativePath = decodedPath.startsWith('/') ? decodedPath.slice(1) : decodedPath;
+  const fullPath = path.join(uploadsPath, relativePath);
+  
+  // Security check: prevent directory traversal
+  if (!fullPath.startsWith(uploadsPath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  
+  // Check if file exists
+  if (!existsSync(fullPath)) {
+    return next(); // Let other handlers deal with 404
+  }
+  
+  // Get effective access level (checks file and parent hierarchy)
+  let accessLevel = 'public';
+  if (fileCache.isReady()) {
+    try {
+      accessLevel = fileCache.getAccessLevel(relativePath);
+    } catch (e) {
+      // If cache fails, default to public for backwards compatibility
+      console.warn('Cache access level check failed:', e.message);
+    }
+  }
+  
+  // If private, check authentication
+  if (accessLevel === 'private') {
+    let isAuthenticated = false;
+    
+    // Check session authentication
+    if (req.session && req.session.authenticated) {
+      isAuthenticated = true;
+    }
+    
+    // Check for API token in query parameter
+    if (!isAuthenticated && (req.query.apiKey || req.query.api_key)) {
+      const apiKey = req.query.apiKey || req.query.api_key;
+      try {
+        const user = await credentialsManager.getUserByApiKey(apiKey);
+        if (user) {
+          isAuthenticated = true;
+        }
+      } catch (e) {
+        // Ignore auth errors
+      }
+    }
+    
+    // Check for API token in Authorization header
+    if (!isAuthenticated) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const apiKey = authHeader.substring(7);
+        try {
+          const user = await credentialsManager.getUserByApiKey(apiKey);
+          if (user) {
+            isAuthenticated = true;
+          }
+        } catch (e) {
+          // Ignore auth errors
+        }
+      }
+    }
+    
+    if (!isAuthenticated) {
+      return res.status(401).json({ 
+        error: 'Authentication required',
+        message: 'This file is private. Please provide a valid session or API token.'
+      });
+    }
+  }
+  
+  // Serve the file (public or authenticated private)
+  return res.sendFile(fullPath);
+});
 
 // Serve admin panel
 app.get('/admin', (req, res) => {
@@ -212,6 +416,12 @@ app.get('/admin', (req, res) => {
 // Serve API documentation page
 app.get('/api-docs', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'api-docs.html'));
+});
+
+// Serve LLM-friendly markdown documentation
+app.get('/llms.md', (req, res) => {
+  res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+  res.sendFile(path.join(__dirname, '..', 'public', 'Simple-file-server-llms.md'));
 });
 
 // Serve admin static assets
@@ -517,9 +727,14 @@ app.get('/api/files', requireAuth, async (req, res) => {
     if (fileCache.isReady()) {
       try {
         const { items, total } = fileCache.getFiles(subPath, page, limit, showHidden);
+        // Add thumbnailUrl for image files
+        const itemsWithThumbnails = items.map(item => ({
+          ...item,
+          thumbnailUrl: !item.isDirectory ? thumbnailGenerator.getThumbnailUrl(item.path) : null
+        }));
         return res.json({
           currentPath: subPath,
-          items,
+          items: itemsWithThumbnails,
           pagination: {
             page,
             limit,
@@ -545,13 +760,29 @@ app.get('/api/files', requireAuth, async (req, res) => {
           const stats = await fs.stat(itemPath);
           const relativePath = path.relative(uploadsPath, itemPath);
           
+          // Get access level from cache if available
+          let accessLevel = 'public';
+          if (fileCache.isReady()) {
+            try {
+              const fileInfo = fileCache.getFileInfo(relativePath);
+              if (fileInfo) {
+                accessLevel = fileInfo.accessLevel;
+              }
+            } catch (e) {
+              // Default to public if cache fails
+            }
+          }
+          
+          const isDir = item.isDirectory();
           return {
             name: item.name,
             path: relativePath,
-            isDirectory: item.isDirectory(),
+            isDirectory: isDir,
             size: stats.size,
             modified: stats.mtime,
-            created: stats.birthtime
+            created: stats.birthtime,
+            accessLevel,
+            thumbnailUrl: !isDir ? thumbnailGenerator.getThumbnailUrl(relativePath) : null
           };
         })
     );
@@ -590,6 +821,14 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
   try {
     const basePath = req.body.basePath || req.body.path || '';
     const relativePaths = req.body.relativePaths;
+    const accessLevel = req.body.mediaAccessLevel || 'public'; // Default to public
+    
+    // Validate access level
+    if (!['public', 'private'].includes(accessLevel)) {
+      return res.status(400).json({ 
+        error: 'Invalid mediaAccessLevel. Must be "public" or "private"' 
+      });
+    }
     
     const isFolderUpload = relativePaths && (Array.isArray(relativePaths) ? relativePaths.length > 0 : true);
     
@@ -597,6 +836,7 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       console.log('📁 Folder upload detected');
       console.log(`Base path: ${basePath || '(root)'}`);
       console.log(`Files: ${req.files.length}`);
+      console.log(`Access level: ${accessLevel}`);
     }
     
     const movedFiles = [];
@@ -633,10 +873,11 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       movedFiles.push({
         name: file.originalname,
         size: file.size,
-        path: fileRelativePath
+        path: fileRelativePath,
+        accessLevel
       });
       
-      // Update cache for uploaded file
+      // Update cache for uploaded file with access level
       try {
         const stats = await fs.stat(targetPath);
         fileCache.addFile(fileRelativePath, {
@@ -644,14 +885,21 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
           modified: stats.mtimeMs,
           created: stats.birthtimeMs,
           isDirectory: false
-        });
+        }, accessLevel);
       } catch (cacheErr) {
         // Don't fail upload if cache update fails
         console.warn('Cache update failed for file:', fileRelativePath);
       }
+      
+      // Generate thumbnail for images (non-blocking)
+      if (thumbnailGenerator.isImageFile(file.originalname)) {
+        thumbnailGenerator.generateThumbnail(fileRelativePath).catch(err => {
+          console.warn('Thumbnail generation failed for:', fileRelativePath, err.message);
+        });
+      }
     }
     
-    // Update cache for created folders
+    // Update cache for created folders with access level
     for (const folderPath of createdFolders) {
       try {
         const fullFolderPath = path.join(uploadsPath, folderPath);
@@ -661,7 +909,7 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
           modified: stats.mtimeMs,
           created: stats.birthtimeMs,
           isDirectory: true
-        });
+        }, accessLevel);
       } catch (cacheErr) {
         // Don't fail upload if cache update fails
         console.warn('Cache update failed for folder:', folderPath);
@@ -691,7 +939,8 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       success: true, 
       message,
       files: movedFiles,
-      foldersCreated: createdFolders.size
+      foldersCreated: createdFolders.size,
+      accessLevel
     });
   } catch (error) {
     console.error('Upload error:', error);
@@ -711,8 +960,16 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
 // Create folder
 app.post('/api/folder', requireAuth, async (req, res) => {
   try {
-    const { path: subPath, name } = req.body;
+    const { path: subPath, name, mediaAccessLevel } = req.body;
+    const accessLevel = mediaAccessLevel || 'public'; // Default to public
     const folderPath = path.join(uploadsPath, subPath || '', name);
+    
+    // Validate access level
+    if (!['public', 'private'].includes(accessLevel)) {
+      return res.status(400).json({ 
+        error: 'Invalid mediaAccessLevel. Must be "public" or "private"' 
+      });
+    }
     
     if (!folderPath.startsWith(uploadsPath)) {
       return res.status(403).json({ error: 'Access denied' });
@@ -720,7 +977,7 @@ app.post('/api/folder', requireAuth, async (req, res) => {
     
     await fs.mkdir(folderPath, { recursive: true });
     
-    // Update cache
+    // Update cache with access level
     try {
       const relativePath = path.relative(uploadsPath, folderPath);
       const stats = await fs.stat(folderPath);
@@ -729,12 +986,16 @@ app.post('/api/folder', requireAuth, async (req, res) => {
         modified: stats.mtimeMs,
         created: stats.birthtimeMs,
         isDirectory: true
-      });
+      }, accessLevel);
     } catch (cacheErr) {
       console.warn('Cache update failed for new folder:', name);
     }
     
-    res.json({ success: true, message: 'Folder created successfully' });
+    res.json({ 
+      success: true, 
+      message: 'Folder created successfully',
+      accessLevel
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -751,8 +1012,9 @@ app.delete('/api/delete', requireAuth, async (req, res) => {
     }
     
     const stats = await fs.stat(fullPath);
+    const isDirectory = stats.isDirectory();
     
-    if (stats.isDirectory()) {
+    if (isDirectory) {
       await fs.rm(fullPath, { recursive: true, force: true });
     } else {
       await fs.unlink(fullPath);
@@ -763,6 +1025,17 @@ app.delete('/api/delete', requireAuth, async (req, res) => {
       fileCache.deleteFile(itemPath);
     } catch (cacheErr) {
       console.warn('Cache update failed for delete:', itemPath);
+    }
+    
+    // Delete corresponding thumbnail(s)
+    try {
+      if (isDirectory) {
+        await thumbnailGenerator.deleteThumbnailDirectory(itemPath);
+      } else if (thumbnailGenerator.isImageFile(itemPath)) {
+        await thumbnailGenerator.deleteThumbnail(itemPath);
+      }
+    } catch (thumbErr) {
+      console.warn('Thumbnail delete failed for:', itemPath, thumbErr.message);
     }
     
     res.json({ success: true, message: 'Deleted successfully' });
@@ -782,14 +1055,38 @@ app.post('/api/rename', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
     
+    // Check if it's a directory before renaming
+    const stats = await fs.stat(oldPath);
+    const isDirectory = stats.isDirectory();
+    
     await fs.rename(oldPath, newPath);
+    
+    const newRelativePath = path.relative(uploadsPath, newPath);
     
     // Update cache (renameFile handles recursive path updates for directories)
     try {
-      const newRelativePath = path.relative(uploadsPath, newPath);
       fileCache.renameFile(itemPath, newRelativePath);
     } catch (cacheErr) {
       console.warn('Cache update failed for rename:', itemPath);
+    }
+    
+    // Rename corresponding thumbnail(s)
+    try {
+      if (isDirectory) {
+        await thumbnailGenerator.renameThumbnailDirectory(itemPath, newRelativePath);
+      } else if (thumbnailGenerator.isImageFile(itemPath) && thumbnailGenerator.isImageFile(newRelativePath)) {
+        await thumbnailGenerator.renameThumbnail(itemPath, newRelativePath);
+      } else if (thumbnailGenerator.isImageFile(itemPath) && !thumbnailGenerator.isImageFile(newRelativePath)) {
+        // If renamed from image to non-image, delete the thumbnail
+        await thumbnailGenerator.deleteThumbnail(itemPath);
+      } else if (!thumbnailGenerator.isImageFile(itemPath) && thumbnailGenerator.isImageFile(newRelativePath)) {
+        // If renamed from non-image to image, generate thumbnail
+        thumbnailGenerator.generateThumbnail(newRelativePath).catch(err => {
+          console.warn('Thumbnail generation failed for:', newRelativePath, err.message);
+        });
+      }
+    } catch (thumbErr) {
+      console.warn('Thumbnail rename failed for:', itemPath, thumbErr.message);
     }
     
     res.json({ success: true, message: 'Renamed successfully' });
@@ -809,6 +1106,64 @@ app.get('/api/download', requireAuth, async (req, res) => {
     }
     
     res.download(fullPath);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update access level of a file or folder
+app.post('/api/access-level', requireAuth, async (req, res) => {
+  try {
+    const { path: itemPath, accessLevel } = req.body;
+    
+    if (!itemPath) {
+      return res.status(400).json({ error: 'Path is required' });
+    }
+    
+    if (!accessLevel || !['public', 'private'].includes(accessLevel)) {
+      return res.status(400).json({ 
+        error: 'Invalid accessLevel. Must be "public" or "private"' 
+      });
+    }
+    
+    const fullPath = path.join(uploadsPath, itemPath);
+    
+    // Security check
+    if (!fullPath.startsWith(uploadsPath)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    // Check if file/folder exists
+    if (!existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File or folder not found' });
+    }
+    
+    // Update access level in cache
+    const updated = fileCache.updateAccessLevel(itemPath, accessLevel);
+    
+    if (!updated) {
+      // If not in cache, try to add it first
+      try {
+        const stats = statSync(fullPath);
+        fileCache.addFile(itemPath, {
+          size: stats.size,
+          modified: stats.mtimeMs,
+          created: stats.birthtimeMs,
+          isDirectory: stats.isDirectory()
+        }, accessLevel);
+      } catch (cacheErr) {
+        return res.status(500).json({ 
+          error: 'Failed to update access level. Cache may not be ready.' 
+        });
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      message: `Access level updated to ${accessLevel}`,
+      path: itemPath,
+      accessLevel
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -840,8 +1195,13 @@ app.get('/api/search', requireAuth, async (req, res) => {
       try {
         const cacheResult = fileCache.searchFiles(query, useRegex, page, limit, showHidden);
         if (cacheResult) {
+          // Add thumbnailUrl for image files
+          const resultsWithThumbnails = cacheResult.results.map(item => ({
+            ...item,
+            thumbnailUrl: !item.isDirectory ? thumbnailGenerator.getThumbnailUrl(item.path) : null
+          }));
           return res.json({
-            results: cacheResult.results,
+            results: resultsWithThumbnails,
             pagination: {
               page,
               limit,
@@ -883,12 +1243,29 @@ app.get('/api/search', requireAuth, async (req, res) => {
         
         if (matches) {
           const stats = await fs.stat(fullPath);
+          
+          // Get access level from cache if available
+          let accessLevel = 'public';
+          if (fileCache.isReady()) {
+            try {
+              const fileInfo = fileCache.getFileInfo(relativePath);
+              if (fileInfo) {
+                accessLevel = fileInfo.accessLevel;
+              }
+            } catch (e) {
+              // Default to public if cache fails
+            }
+          }
+          
+          const isDir = item.isDirectory();
           results.push({
             name: item.name,
             path: relativePath,
-            isDirectory: item.isDirectory(),
+            isDirectory: isDir,
             size: stats.size,
-            modified: stats.mtime
+            modified: stats.mtime,
+            accessLevel,
+            thumbnailUrl: !isDir ? thumbnailGenerator.getThumbnailUrl(relativePath) : null
           });
         }
         
@@ -1000,6 +1377,61 @@ app.post('/api/cache/rebuild', requireAuth, requireAdmin, async (req, res) => {
     res.json({ 
       success: true, 
       message: 'Cache rebuild started in background' 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== THUMBNAIL API ROUTES =====
+
+// Get thumbnail generator status
+app.get('/api/thumbnails/status', requireAuth, (req, res) => {
+  res.json(thumbnailGenerator.getStatus());
+});
+
+// Generate thumbnails for all existing images (admin only)
+app.post('/api/thumbnails/generate', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const status = thumbnailGenerator.getStatus();
+    if (!status.initialized) {
+      return res.status(503).json({ error: 'Thumbnail generator not initialized' });
+    }
+    
+    // Run generation in background
+    thumbnailGenerator.generateAllThumbnails().then(stats => {
+      console.log(`✅ Bulk thumbnail generation completed: ${stats.generated} generated, ${stats.skipped} skipped, ${stats.failed} failed`);
+    }).catch(err => {
+      console.error('❌ Bulk thumbnail generation failed:', err.message);
+    });
+    
+    res.json({ 
+      success: true, 
+      message: 'Thumbnail generation started in background' 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Sync thumbnails - generate missing and remove orphaned (admin only)
+app.post('/api/thumbnails/sync', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const status = thumbnailGenerator.getStatus();
+    if (!status.initialized) {
+      return res.status(503).json({ error: 'Thumbnail generator not initialized' });
+    }
+    
+    // Run sync in background
+    thumbnailGenerator.syncThumbnails().then(stats => {
+      console.log(`✅ Thumbnail sync completed: ${stats.generated} generated, ${stats.deleted} orphans deleted, ${stats.failed} failed`);
+    }).catch(err => {
+      console.error('❌ Thumbnail sync failed:', err.message);
+    });
+    
+    res.json({ 
+      success: true, 
+      message: 'Thumbnail sync started in background' 
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

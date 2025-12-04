@@ -4,3 +4,4 @@ uploads/
 credential.json
 .env
 .cache/
+.thumbnail/

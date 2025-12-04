@@ -232,11 +232,13 @@ function renderFileList(items) {
   emptyState.style.display = 'none';
   
   tbody.innerHTML = filteredItems.map(item => {
-    const thumbnail = getFileThumbnail(item.name, item.path, item.isDirectory);
+    const thumbnail = getFileThumbnail(item.name, item.path, item.isDirectory, item.thumbnailUrl);
     const size = item.isDirectory ? '-' : formatFileSize(item.size);
     const modified = new Date(item.modified).toLocaleString();
     const escapedPath = item.path.replace(/'/g, "\\'");
     const escapedName = item.name.replace(/'/g, "\\'");
+    const isPrivate = item.accessLevel === 'private';
+    const privateIndicator = isPrivate ? '<span class="private-indicator">🔒 Private</span>' : '';
     
     return `
       <tr id="row-${btoa(item.path)}" class="${selectedItems.has(item.path) ? 'selected' : ''}">
@@ -252,6 +254,7 @@ function renderFileList(items) {
           <div class="file-name" onclick="${item.isDirectory ? `loadFiles('${escapedPath}')` : `window.open('/${escapedPath}', '_blank')`}">
             ${thumbnail}
             ${item.name}
+            ${privateIndicator}
           </div>
         </td>
         <td>${size}</td>
@@ -260,6 +263,7 @@ function renderFileList(items) {
           <div class="file-actions">
             ${!item.isDirectory ? `<button class="icon-btn" onclick="downloadFile('${escapedPath}')" title="Download">⬇️</button>` : ''}
             <button class="icon-btn" onclick="openRenameModal('${escapedPath}', '${escapedName}')" title="Rename">✏️</button>
+            <button class="icon-btn" onclick="toggleAccessLevel('${escapedPath}', '${isPrivate ? 'public' : 'private'}')" title="${isPrivate ? 'Make Public' : 'Make Private'}">${isPrivate ? '🔓' : '🔒'}</button>
             <button class="icon-btn danger" onclick="deleteItem('${escapedPath}', '${escapedName}')" title="Delete">🗑️</button>
           </div>
         </td>
@@ -297,7 +301,7 @@ function renderBreadcrumb(path) {
   }
 }
 
-function getFileThumbnail(filename, filepath, isDirectory) {
+function getFileThumbnail(filename, filepath, isDirectory, thumbnailUrl = null) {
   if (isDirectory) {
     return `
       <div class="file-thumbnail">
@@ -308,12 +312,14 @@ function getFileThumbnail(filename, filepath, isDirectory) {
   
   const ext = filename.split('.').pop().toLowerCase();
   
-  // Check if it's an image
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+  // Check if it's an image - use thumbnail if available
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tiff', 'tif'];
   if (imageExtensions.includes(ext)) {
+    // Use thumbnail URL if available, otherwise fall back to original
+    const imgSrc = thumbnailUrl || `/${filepath}`;
     return `
       <div class="file-thumbnail">
-        <img src="/${filepath}" alt="${filename}" onerror="this.parentElement.innerHTML='<div class=\\'file-type-icon icon-default\\'>IMG</div>'">
+        <img src="${imgSrc}" alt="${filename}" onerror="this.parentElement.innerHTML='<div class=\\'file-type-icon icon-default\\'>IMG</div>'">
       </div>
     `;
   }
@@ -404,6 +410,9 @@ function openUploadModal() {
   document.querySelector('#uploadModal .modal-header h2').textContent = '📤 Upload Files';
   selectedFiles = [];
   updateSelectedFilesList();
+  // Reset access level toggle to public (unchecked)
+  document.getElementById('uploadAccessLevel').checked = false;
+  updateUploadToggleText();
 }
 
 function openFolderUploadModal() {
@@ -412,6 +421,9 @@ function openFolderUploadModal() {
   document.querySelector('#uploadModal .modal-header h2').textContent = '📁 Upload Folder';
   selectedFiles = [];
   updateSelectedFilesList();
+  // Reset access level toggle to public (unchecked)
+  document.getElementById('uploadAccessLevel').checked = false;
+  updateUploadToggleText();
 }
 
 function closeUploadModal() {
@@ -420,6 +432,35 @@ function closeUploadModal() {
   document.getElementById('folderInput').value = '';
   selectedFiles = [];
   updateSelectedFilesList();
+  // Reset access level toggle
+  document.getElementById('uploadAccessLevel').checked = false;
+  updateUploadToggleText();
+}
+
+// Update upload access level toggle text
+function updateUploadToggleText() {
+  const checkbox = document.getElementById('uploadAccessLevel');
+  const textSpan = document.getElementById('uploadAccessText');
+  if (checkbox.checked) {
+    textSpan.textContent = 'Private';
+    textSpan.className = 'toggle-text private';
+  } else {
+    textSpan.textContent = 'Public';
+    textSpan.className = 'toggle-text public';
+  }
+}
+
+// Update folder access level toggle text
+function updateFolderToggleText() {
+  const checkbox = document.getElementById('folderAccessLevel');
+  const textSpan = document.getElementById('folderAccessText');
+  if (checkbox.checked) {
+    textSpan.textContent = 'Private';
+    textSpan.className = 'toggle-text private';
+  } else {
+    textSpan.textContent = 'Public';
+    textSpan.className = 'toggle-text public';
+  }
 }
 
 function handleFileSelect(event) {
@@ -484,6 +525,11 @@ async function uploadFiles() {
   // Add base path FIRST so multer can parse it before processing files
   formData.append('basePath', currentPath);
   
+  // Add access level (public or private)
+  const accessLevelCheckbox = document.getElementById('uploadAccessLevel');
+  const accessLevel = accessLevelCheckbox && accessLevelCheckbox.checked ? 'private' : 'public';
+  formData.append('mediaAccessLevel', accessLevel);
+  
   // Check if this is a folder upload (files have webkitRelativePath)
   const isFolder = selectedFiles[0]?.webkitRelativePath;
   
@@ -540,10 +586,16 @@ async function uploadFiles() {
 function openCreateFolderModal() {
   document.getElementById('createFolderModal').classList.add('active');
   document.getElementById('folderName').value = '';
+  // Reset access level toggle to public (unchecked)
+  document.getElementById('folderAccessLevel').checked = false;
+  updateFolderToggleText();
 }
 
 function closeCreateFolderModal() {
   document.getElementById('createFolderModal').classList.remove('active');
+  // Reset access level toggle
+  document.getElementById('folderAccessLevel').checked = false;
+  updateFolderToggleText();
 }
 
 async function createFolder() {
@@ -554,11 +606,15 @@ async function createFolder() {
     return;
   }
   
+  // Get access level
+  const accessLevelCheckbox = document.getElementById('folderAccessLevel');
+  const accessLevel = accessLevelCheckbox && accessLevelCheckbox.checked ? 'private' : 'public';
+  
   try {
     const response = await fetch('/api/folder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: currentPath, name }),
+      body: JSON.stringify({ path: currentPath, name, mediaAccessLevel: accessLevel }),
       credentials: 'include'
     });
     
@@ -651,6 +707,36 @@ async function confirmRename() {
 // Download
 function downloadFile(path) {
   window.location.href = `/api/download?path=${encodeURIComponent(path)}`;
+}
+
+// Toggle access level (public/private)
+async function toggleAccessLevel(itemPath, newAccessLevel) {
+  const actionText = newAccessLevel === 'private' ? 'make this item private' : 'make this item public';
+  const confirmed = await customConfirm(`Are you sure you want to ${actionText}?`, 'Change Access Level');
+  
+  if (!confirmed) {
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/access-level', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: itemPath, accessLevel: newAccessLevel }),
+      credentials: 'include'
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showAlert('alert', data.message, 'success');
+      loadFiles(currentPath, false); // Reload without resetting page
+    } else {
+      showAlert('alert', data.error || 'Failed to change access level', 'error');
+    }
+  } catch (error) {
+    showAlert('alert', 'Failed to change access level: ' + error.message, 'error');
+  }
 }
 
 // Search
@@ -1156,6 +1242,121 @@ function closeCustomPrompt(result) {
   if (customPromptCallback) {
     customPromptCallback(result);
     customPromptCallback = null;
+  }
+}
+
+// ========== SETTINGS FUNCTIONS (Admin Only) ==========
+
+// Open Settings modal
+function openSettingsModal() {
+  document.getElementById('settingsModal').classList.add('active');
+  document.getElementById('settingsAlert').className = 'alert';
+  document.getElementById('settingsAlert').textContent = '';
+  loadThumbnailStatus();
+}
+
+// Close Settings modal
+function closeSettingsModal() {
+  document.getElementById('settingsModal').classList.remove('active');
+}
+
+// Load thumbnail status
+async function loadThumbnailStatus() {
+  const statusText = document.getElementById('thumbStatusText');
+  try {
+    const response = await fetch('/api/thumbnails/status', {
+      credentials: 'include'
+    });
+    const data = await response.json();
+    
+    if (response.ok && data.initialized) {
+      statusText.innerHTML = `✅ Initialized | Size: ${data.thumbnailSize}x${data.thumbnailSize} | Format: ${data.thumbnailFormat.toUpperCase()}`;
+    } else {
+      statusText.innerHTML = '❌ Not initialized';
+    }
+  } catch (error) {
+    statusText.innerHTML = '❌ Error loading status';
+  }
+}
+
+// Sync cache
+async function syncCache() {
+  const btn = document.getElementById('syncCacheBtn');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Syncing...';
+  
+  try {
+    const response = await fetch('/api/cache/rebuild', {
+      method: 'POST',
+      credentials: 'include'
+    });
+    const data = await response.json();
+    
+    if (response.ok) {
+      showAlert('settingsAlert', 'Cache sync started in background', 'success');
+    } else {
+      showAlert('settingsAlert', data.error || 'Failed to sync cache', 'error');
+    }
+  } catch (error) {
+    showAlert('settingsAlert', 'Failed to sync cache: ' + error.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+}
+
+// Generate thumbnails
+async function generateThumbnails() {
+  const btn = document.getElementById('generateThumbBtn');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Generating...';
+  
+  try {
+    const response = await fetch('/api/thumbnails/generate', {
+      method: 'POST',
+      credentials: 'include'
+    });
+    const data = await response.json();
+    
+    if (response.ok) {
+      showAlert('settingsAlert', 'Thumbnail generation started in background', 'success');
+    } else {
+      showAlert('settingsAlert', data.error || 'Failed to generate thumbnails', 'error');
+    }
+  } catch (error) {
+    showAlert('settingsAlert', 'Failed to generate thumbnails: ' + error.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+}
+
+// Sync thumbnails (generate missing + remove orphaned)
+async function syncThumbnails() {
+  const btn = document.getElementById('syncThumbBtn');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Syncing...';
+  
+  try {
+    const response = await fetch('/api/thumbnails/sync', {
+      method: 'POST',
+      credentials: 'include'
+    });
+    const data = await response.json();
+    
+    if (response.ok) {
+      showAlert('settingsAlert', 'Thumbnail sync started in background', 'success');
+    } else {
+      showAlert('settingsAlert', data.error || 'Failed to sync thumbnails', 'error');
+    }
+  } catch (error) {
+    showAlert('settingsAlert', 'Failed to sync thumbnails: ' + error.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
   }
 }
 

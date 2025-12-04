@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'fs/promises';
 import { existsSync, mkdirSync, statSync } from 'fs';
 import path from 'path';
+import * as thumbnailGenerator from './thumbnail-generator.js';
 
 // Cache state
 let db = null;
@@ -76,9 +77,22 @@ function createSchema() {
       modified INTEGER NOT NULL,
       created INTEGER NOT NULL,
       is_directory INTEGER NOT NULL,
-      last_synced INTEGER NOT NULL
+      last_synced INTEGER NOT NULL,
+      access_level TEXT DEFAULT 'public'
     )
   `);
+
+  // Migration: Add access_level column if it doesn't exist (for existing databases)
+  try {
+    const columns = db.prepare("PRAGMA table_info(files)").all();
+    const hasAccessLevel = columns.some(col => col.name === 'access_level');
+    if (!hasAccessLevel) {
+      db.exec(`ALTER TABLE files ADD COLUMN access_level TEXT DEFAULT 'public'`);
+      console.log('   📦 Migrated database: added access_level column');
+    }
+  } catch (e) {
+    // Column might already exist or table doesn't exist yet
+  }
 
   // Index for fast directory listing
   db.exec(`
@@ -198,7 +212,7 @@ export function getFiles(parentPath, page = 1, limit = 50, showHidden = false) {
 
   if (showHidden) {
     query = `
-      SELECT path, name, is_directory, size, modified, created
+      SELECT path, name, is_directory, size, modified, created, access_level
       FROM files
       WHERE parent_path = @parentPath
       ORDER BY is_directory DESC, name COLLATE NOCASE ASC
@@ -209,7 +223,7 @@ export function getFiles(parentPath, page = 1, limit = 50, showHidden = false) {
     `;
   } else {
     query = `
-      SELECT path, name, is_directory, size, modified, created
+      SELECT path, name, is_directory, size, modified, created, access_level
       FROM files
       WHERE parent_path = @parentPath AND name NOT LIKE '.%'
       ORDER BY is_directory DESC, name COLLATE NOCASE ASC
@@ -231,7 +245,8 @@ export function getFiles(parentPath, page = 1, limit = 50, showHidden = false) {
       isDirectory: item.is_directory === 1,
       size: item.size,
       modified: new Date(item.modified),
-      created: new Date(item.created)
+      created: new Date(item.created),
+      accessLevel: item.access_level || 'public'
     })),
     total
   };
@@ -260,7 +275,7 @@ export function searchFiles(query, useRegex = false, page = 1, limit = 50, showH
 
   if (showHidden) {
     sql = `
-      SELECT path, name, is_directory, size, modified, created
+      SELECT path, name, is_directory, size, modified, created, access_level
       FROM files
       WHERE name LIKE @pattern COLLATE NOCASE
       ORDER BY is_directory DESC, name COLLATE NOCASE ASC
@@ -272,7 +287,7 @@ export function searchFiles(query, useRegex = false, page = 1, limit = 50, showH
     `;
   } else {
     sql = `
-      SELECT path, name, is_directory, size, modified, created
+      SELECT path, name, is_directory, size, modified, created, access_level
       FROM files
       WHERE name LIKE @pattern COLLATE NOCASE AND name NOT LIKE '.%'
       ORDER BY is_directory DESC, name COLLATE NOCASE ASC
@@ -293,7 +308,8 @@ export function searchFiles(query, useRegex = false, page = 1, limit = 50, showH
       path: item.path,
       isDirectory: item.is_directory === 1,
       size: item.size,
-      modified: new Date(item.modified)
+      modified: new Date(item.modified),
+      accessLevel: item.access_level || 'public'
     })),
     total
   };
@@ -324,8 +340,9 @@ export function getStorageInfo() {
  * Add or update a single file in the cache
  * @param {string} filePath - Relative path to the file
  * @param {Object} stats - File statistics
+ * @param {string} accessLevel - Access level ('public' or 'private')
  */
-export function addFile(filePath, stats) {
+export function addFile(filePath, stats, accessLevel = 'public') {
   if (!db) return;
 
   const normalizedPath = filePath.replace(/\\/g, '/');
@@ -333,8 +350,8 @@ export function addFile(filePath, stats) {
   const parentPath = path.dirname(normalizedPath);
 
   const stmt = db.prepare(`
-    INSERT OR REPLACE INTO files (path, name, parent_path, size, modified, created, is_directory, last_synced)
-    VALUES (@path, @name, @parentPath, @size, @modified, @created, @isDirectory, @lastSynced)
+    INSERT OR REPLACE INTO files (path, name, parent_path, size, modified, created, is_directory, last_synced, access_level)
+    VALUES (@path, @name, @parentPath, @size, @modified, @created, @isDirectory, @lastSynced, @accessLevel)
   `);
 
   stmt.run({
@@ -345,20 +362,21 @@ export function addFile(filePath, stats) {
     modified: stats.modified || stats.mtimeMs || Date.now(),
     created: stats.created || stats.birthtimeMs || Date.now(),
     isDirectory: stats.isDirectory ? 1 : 0,
-    lastSynced: Date.now()
+    lastSynced: Date.now(),
+    accessLevel: accessLevel || 'public'
   });
 }
 
 /**
  * Add multiple files in a transaction (for bulk operations)
- * @param {Array} files - Array of { path, stats } objects
+ * @param {Array} files - Array of { path, stats, accessLevel? } objects
  */
 export function addFiles(files) {
   if (!db || files.length === 0) return;
 
   const stmt = db.prepare(`
-    INSERT OR REPLACE INTO files (path, name, parent_path, size, modified, created, is_directory, last_synced)
-    VALUES (@path, @name, @parentPath, @size, @modified, @created, @isDirectory, @lastSynced)
+    INSERT OR REPLACE INTO files (path, name, parent_path, size, modified, created, is_directory, last_synced, access_level)
+    VALUES (@path, @name, @parentPath, @size, @modified, @created, @isDirectory, @lastSynced, @accessLevel)
   `);
 
   const insertMany = db.transaction((items) => {
@@ -375,7 +393,8 @@ export function addFiles(files) {
         modified: item.stats.modified || item.stats.mtimeMs || Date.now(),
         created: item.stats.created || item.stats.birthtimeMs || Date.now(),
         isDirectory: item.stats.isDirectory ? 1 : 0,
-        lastSynced: Date.now()
+        lastSynced: Date.now(),
+        accessLevel: item.accessLevel || 'public'
       });
     }
   });
@@ -623,7 +642,14 @@ export function startPeriodicSync(interval) {
     
     try {
       await rebuildCache();
-      console.log(`✅ Periodic sync completed (${totalFilesScanned} items)`);
+      console.log(`✅ Periodic cache sync completed (${totalFilesScanned} items)`);
+      
+      // Sync thumbnails after cache rebuild
+      if (thumbnailGenerator.getStatus().initialized) {
+        console.log('🔄 Starting periodic thumbnail sync...');
+        const thumbStats = await thumbnailGenerator.syncThumbnails();
+        console.log(`✅ Periodic thumbnail sync completed (${thumbStats.generated} generated, ${thumbStats.deleted} orphans deleted)`);
+      }
     } catch (error) {
       console.error('❌ Periodic sync failed:', error.message);
     }
@@ -659,6 +685,100 @@ export function close() {
   }
 }
 
+/**
+ * Get the effective access level for a path (checking parent hierarchy)
+ * A file is private if it or any of its parent folders is private
+ * @param {string} filePath - Relative path to check
+ * @returns {string} 'public' or 'private'
+ */
+export function getAccessLevel(filePath) {
+  if (!db) return 'public';
+
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  
+  // Check the file itself first
+  const file = db.prepare(`
+    SELECT access_level FROM files WHERE path = @path
+  `).get({ path: normalizedPath });
+  
+  if (file && file.access_level === 'private') {
+    return 'private';
+  }
+  
+  // Check parent folders (walk up the path hierarchy)
+  const parts = normalizedPath.split('/');
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const parentPath = parts.slice(0, i).join('/');
+    if (parentPath === '') continue;
+    
+    const parent = db.prepare(`
+      SELECT access_level FROM files WHERE path = @path AND is_directory = 1
+    `).get({ path: parentPath });
+    
+    if (parent && parent.access_level === 'private') {
+      return 'private';
+    }
+  }
+  
+  return 'public';
+}
+
+/**
+ * Update the access level of a file or folder
+ * @param {string} filePath - Relative path to update
+ * @param {string} level - 'public' or 'private'
+ * @returns {boolean} success
+ */
+export function updateAccessLevel(filePath, level) {
+  if (!db) return false;
+  
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const validLevels = ['public', 'private'];
+  
+  if (!validLevels.includes(level)) {
+    throw new Error('Invalid access level. Must be "public" or "private"');
+  }
+  
+  const result = db.prepare(`
+    UPDATE files SET access_level = @level, last_synced = @lastSynced
+    WHERE path = @path
+  `).run({
+    path: normalizedPath,
+    level,
+    lastSynced: Date.now()
+  });
+  
+  return result.changes > 0;
+}
+
+/**
+ * Get file info including access level
+ * @param {string} filePath - Relative path
+ * @returns {Object|null} File info or null if not found
+ */
+export function getFileInfo(filePath) {
+  if (!db) return null;
+  
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  
+  const file = db.prepare(`
+    SELECT path, name, is_directory, size, modified, created, access_level
+    FROM files WHERE path = @path
+  `).get({ path: normalizedPath });
+  
+  if (!file) return null;
+  
+  return {
+    name: file.name,
+    path: file.path,
+    isDirectory: file.is_directory === 1,
+    size: file.size,
+    modified: new Date(file.modified),
+    created: new Date(file.created),
+    accessLevel: file.access_level || 'public'
+  };
+}
+
 export default {
   initializeCache,
   isReady,
@@ -674,5 +794,8 @@ export default {
   syncDirectory,
   startPeriodicSync,
   stopPeriodicSync,
-  close
+  close,
+  getAccessLevel,
+  updateAccessLevel,
+  getFileInfo
 };

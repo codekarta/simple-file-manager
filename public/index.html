@@ -190,6 +190,108 @@
       background: var(--success-hover);
     }
 
+    /* Toggle Switch Styles */
+    .access-level-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--gray-50);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-top: var(--spacing-md);
+    }
+
+    .access-level-toggle .toggle-label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .access-level-toggle .toggle-label span {
+      font-weight: 500;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .access-level-toggle .toggle-hint {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+
+    .toggle-slider {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background-color: var(--success);
+      border-radius: 24px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .toggle-slider:before {
+      content: "";
+      position: absolute;
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: all 0.3s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+      background-color: var(--warning);
+    }
+
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(20px);
+    }
+
+    .toggle-text {
+      font-size: 12px;
+      font-weight: 500;
+      min-width: 50px;
+    }
+
+    .toggle-text.public {
+      color: var(--success);
+    }
+
+    .toggle-text.private {
+      color: var(--warning);
+    }
+
+    /* Private indicator in file list */
+    .private-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      background: var(--warning-light, #fef3c7);
+      color: var(--warning);
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
     .btn-danger {
       background: var(--danger);
       color: white;
@@ -1123,6 +1225,7 @@
         <a href="/api-docs" class="btn btn-secondary btn-sm" style="text-decoration: none;">📖 API Docs</a>
         <button class="btn btn-secondary btn-sm" onclick="openAbout()">ℹ️ About</button>
         <button class="btn btn-secondary btn-sm" onclick="openUserSettings()">🔑 API Token</button>
+        <button class="btn btn-secondary btn-sm admin-only" onclick="openSettingsModal()" style="display: none;">⚙️ Settings</button>
         <button class="btn btn-secondary btn-sm admin-only" onclick="openUserManagement()" style="display: none;">👥 Users</button>
         <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
       </div>
@@ -1267,6 +1370,18 @@
       
       <div id="selectedFiles"></div>
       
+      <div class="access-level-toggle">
+        <div class="toggle-label">
+          <span>Access Level</span>
+          <span class="toggle-hint">Private files require authentication to access</span>
+        </div>
+        <div class="toggle-switch">
+          <input type="checkbox" id="uploadAccessLevel" onchange="updateUploadToggleText()">
+          <span class="toggle-slider"></span>
+          <span class="toggle-text public" id="uploadAccessText">Public</span>
+        </div>
+      </div>
+      
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
         <button class="btn btn-primary" id="uploadBtn" onclick="uploadFiles()" disabled>Upload</button>
@@ -1284,6 +1399,18 @@
       <div class="form-group">
         <label for="folderName">Folder Name</label>
         <input type="text" id="folderName" placeholder="Enter folder name">
+      </div>
+      
+      <div class="access-level-toggle">
+        <div class="toggle-label">
+          <span>Access Level</span>
+          <span class="toggle-hint">Private folders require authentication to access</span>
+        </div>
+        <div class="toggle-switch">
+          <input type="checkbox" id="folderAccessLevel" onchange="updateFolderToggleText()">
+          <span class="toggle-slider"></span>
+          <span class="toggle-text public" id="folderAccessText">Public</span>
+        </div>
       </div>
       
       <div class="modal-footer">
@@ -1523,6 +1650,59 @@
         <button class="btn btn-secondary" onclick="closePasswordResetModal()">Cancel</button>
         <button id="passwordResetChooseBtn" class="btn btn-secondary" onclick="showPasswordResetCustomInput()">Choose Password</button>
         <button id="passwordResetAutoBtn" class="btn btn-primary" onclick="confirmPasswordReset(true)">Auto Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal (Admin Only) -->
+  <div id="settingsModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>⚙️ Settings</h2>
+      </div>
+      
+      <div style="padding: 16px;">
+        <div id="settingsAlert" class="alert"></div>
+        
+        <!-- Cache Management Section -->
+        <div style="margin-bottom: 20px; padding: 16px; background: var(--gray-50); border-radius: var(--radius-md);">
+          <h3 style="margin-bottom: 12px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+            🗄️ Cache Management
+          </h3>
+          <p style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">
+            Rebuild the file cache to sync with filesystem changes made outside the app.
+          </p>
+          <button class="btn btn-primary" onclick="syncCache()" id="syncCacheBtn">
+            🔄 Sync Cache
+          </button>
+        </div>
+        
+        <!-- Thumbnail Management Section -->
+        <div style="margin-bottom: 20px; padding: 16px; background: var(--gray-50); border-radius: var(--radius-md);">
+          <h3 style="margin-bottom: 12px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+            📸 Thumbnail Management
+          </h3>
+          <p style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">
+            Generate thumbnails for all images or sync thumbnails (generate missing, remove orphaned).
+          </p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="generateThumbnails()" id="generateThumbBtn">
+              🖼️ Generate Thumbnails
+            </button>
+            <button class="btn btn-secondary" onclick="syncThumbnails()" id="syncThumbBtn">
+              🔄 Sync Thumbnails
+            </button>
+          </div>
+        </div>
+        
+        <!-- Thumbnail Status -->
+        <div id="thumbnailStatus" style="padding: 12px; background: var(--gray-100); border-radius: var(--radius-sm); font-size: 12px; color: var(--text-secondary);">
+          <strong>Thumbnail Status:</strong> <span id="thumbStatusText">Loading...</span>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeSettingsModal()">Close</button>
       </div>
     </div>
   </div>
