@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# Simple File Manager - PM2 Run Script
-# This script manages the file manager application using PM2
+# Simple File Manager - Run Script
+# This script manages the file manager application (with or without PM2)
 
 set -e  # Exit on error
 
 APP_NAME="simple-file-manager"
 NODE_ENV="${NODE_ENV:-production}"
 PORT="${PORT:-3000}"
+USE_PM2=true  # Will be set to false if PM2 is not available/wanted
 
 # Function to read .env file
 read_env_value() {
@@ -33,7 +34,7 @@ print_message() {
     echo -e "${2}${1}${NC}"
 }
 
-print_message "🚀 Simple File Manager - PM2 Deployment Script" "$BLUE"
+print_message "🚀 Simple File Manager - Deployment Script" "$BLUE"
 echo ""
 
 # Check if Node.js is installed
@@ -46,9 +47,34 @@ print_message "✓ Node.js version: $(node -v)" "$GREEN"
 
 # Check if pm2 is installed
 if ! command -v pm2 &> /dev/null; then
-    print_message "⚠️  PM2 is not installed. Installing PM2 globally..." "$YELLOW"
-    npm install -g pm2
-    print_message "✓ PM2 installed successfully" "$GREEN"
+    echo ""
+    print_message "⚠️  PM2 is not installed!" "$YELLOW"
+    echo ""
+    print_message "Why PM2 is recommended:" "$BLUE"
+    echo "   • Auto-restart: Automatically restarts your app if it crashes"
+    echo "   • Process management: Easy start/stop/restart commands"
+    echo "   • Logging: Built-in log management and rotation"
+    echo "   • Monitoring: Real-time CPU/memory monitoring"
+    echo "   • Startup scripts: Auto-start on system reboot"
+    echo "   • Zero-downtime reload: Update without dropping connections"
+    echo "   • Cluster mode: Scale across all CPUs"
+    echo ""
+    
+    # Ask user if they want to install PM2
+    read -p "Would you like to install PM2? (y/n): " install_pm2
+    echo ""
+    
+    if [[ "$install_pm2" =~ ^[Yy]$ ]]; then
+        print_message "📦 Installing PM2 globally..." "$BLUE"
+        npm install -g pm2
+        print_message "✓ PM2 installed successfully" "$GREEN"
+    else
+        USE_PM2=false
+        print_message "ℹ️  Continuing without PM2..." "$YELLOW"
+        echo "   The application will run directly with Node.js"
+        echo "   Note: You'll need to manually restart if the app crashes"
+        echo ""
+    fi
 else
     print_message "✓ PM2 version: $(pm2 -v)" "$GREEN"
 fi
@@ -88,72 +114,109 @@ if [ ! -d "uploads" ]; then
     print_message "✓ Created uploads directory" "$GREEN"
 fi
 
-# Stop the application if it's already running
-if pm2 list | grep -q "$APP_NAME"; then
-    print_message "🔄 Stopping existing instance..." "$YELLOW"
-    pm2 stop "$APP_NAME"
-    pm2 delete "$APP_NAME"
-fi
-
-# Start the application with PM2
-print_message "🚀 Starting $APP_NAME with PM2..." "$BLUE"
-pm2 start src/server.js \
-    --name "$APP_NAME" \
-    --node-args="--max-old-space-size=512" \
-    --time \
-    --env production
-
-# Save PM2 process list
-pm2 save
-
-print_message "✓ Application started successfully!" "$GREEN"
-echo ""
-
 # Read configuration from .env
 ENV_PORT=$(read_env_value "PORT" "$PORT")
 ENV_UPLOAD_DIR=$(read_env_value "UPLOAD_DIR" "uploads")
 ENV_ALLOW_EXTERNAL=$(read_env_value "ALLOW_EXTERNAL_UPLOAD_FOLDER" "false")
 
-# Display application info
-print_message "📋 Application Information:" "$BLUE"
-echo "   • Name: $APP_NAME"
-echo "   • Port: $ENV_PORT"
-echo "   • Environment: $NODE_ENV"
-echo "   • URL: http://localhost:$ENV_PORT"
-echo "   • Admin Panel: http://localhost:$ENV_PORT/admin"
-echo "   • API Docs: http://localhost:$ENV_PORT/api-docs"
-echo ""
+if [ "$USE_PM2" = true ]; then
+    # ===== PM2 MODE =====
+    
+    # Stop the application if it's already running
+    if pm2 list | grep -q "$APP_NAME"; then
+        print_message "🔄 Stopping existing instance..." "$YELLOW"
+        pm2 stop "$APP_NAME"
+        pm2 delete "$APP_NAME"
+    fi
 
-# Display storage configuration
-print_message "💾 Storage Configuration:" "$BLUE"
-echo "   • Upload Directory: $ENV_UPLOAD_DIR"
+    # Start the application with PM2
+    print_message "🚀 Starting $APP_NAME with PM2..." "$BLUE"
+    pm2 start src/server.js \
+        --name "$APP_NAME" \
+        --node-args="--max-old-space-size=512" \
+        --time \
+        --env production
 
-# Display ALLOW_EXTERNAL_UPLOAD_FOLDER status with color
-if [ "$ENV_ALLOW_EXTERNAL" = "true" ]; then
-    echo -e "   • External Upload Folder: ${GREEN}✓ Allowed${NC}"
+    # Save PM2 process list
+    pm2 save
+
+    print_message "✓ Application started successfully!" "$GREEN"
+    echo ""
+
+    # Display application info
+    print_message "📋 Application Information:" "$BLUE"
+    echo "   • Name: $APP_NAME"
+    echo "   • Port: $ENV_PORT"
+    echo "   • Environment: $NODE_ENV"
+    echo "   • URL: http://localhost:$ENV_PORT"
+    echo "   • Admin Panel: http://localhost:$ENV_PORT/admin"
+    echo "   • API Docs: http://localhost:$ENV_PORT/api-docs"
+    echo ""
+
+    # Display storage configuration
+    print_message "💾 Storage Configuration:" "$BLUE"
+    echo "   • Upload Directory: $ENV_UPLOAD_DIR"
+
+    # Display ALLOW_EXTERNAL_UPLOAD_FOLDER status with color
+    if [ "$ENV_ALLOW_EXTERNAL" = "true" ]; then
+        echo -e "   • External Upload Folder: ${GREEN}✓ Allowed${NC}"
+    else
+        echo -e "   • External Upload Folder: ${YELLOW}✗ Not Allowed (Default)${NC}"
+    fi
+    echo ""
+
+    # Display PM2 commands
+    print_message "📌 Useful PM2 Commands:" "$BLUE"
+    echo "   • View logs:       pm2 logs $APP_NAME"
+    echo "   • Monitor:         pm2 monit"
+    echo "   • Stop:            pm2 stop $APP_NAME"
+    echo "   • Restart:         pm2 restart $APP_NAME"
+    echo "   • Delete:          pm2 delete $APP_NAME"
+    echo "   • View status:     pm2 status"
+    echo "   • View details:    pm2 show $APP_NAME"
+    echo ""
+
+    # Display current status
+    print_message "📊 Current Status:" "$BLUE"
+    pm2 status
+
+    # Setup PM2 to start on system boot (optional)
+    echo ""
+    print_message "💡 Tip: To make PM2 start on system boot, run:" "$YELLOW"
+    echo "   pm2 startup"
+    echo "   Then run the command it provides"
+
 else
-    echo -e "   • External Upload Folder: ${YELLOW}✗ Not Allowed (Default)${NC}"
+    # ===== NON-PM2 MODE (Direct Node.js) =====
+    
+    echo ""
+    print_message "📋 Application Information:" "$BLUE"
+    echo "   • Port: $ENV_PORT"
+    echo "   • Environment: $NODE_ENV"
+    echo "   • URL: http://localhost:$ENV_PORT"
+    echo "   • Admin Panel: http://localhost:$ENV_PORT/admin"
+    echo "   • API Docs: http://localhost:$ENV_PORT/api-docs"
+    echo ""
+
+    # Display storage configuration
+    print_message "💾 Storage Configuration:" "$BLUE"
+    echo "   • Upload Directory: $ENV_UPLOAD_DIR"
+
+    # Display ALLOW_EXTERNAL_UPLOAD_FOLDER status with color
+    if [ "$ENV_ALLOW_EXTERNAL" = "true" ]; then
+        echo -e "   • External Upload Folder: ${GREEN}✓ Allowed${NC}"
+    else
+        echo -e "   • External Upload Folder: ${YELLOW}✗ Not Allowed (Default)${NC}"
+    fi
+    echo ""
+
+    print_message "🚀 Starting application with Node.js..." "$BLUE"
+    echo "   Press Ctrl+C to stop the server"
+    echo ""
+    print_message "─────────────────────────────────────────────────" "$BLUE"
+    echo ""
+    
+    # Run the application directly with Node.js
+    NODE_ENV="$NODE_ENV" node --max-old-space-size=512 src/server.js
 fi
-echo ""
-
-# Display PM2 commands
-print_message "📌 Useful PM2 Commands:" "$BLUE"
-echo "   • View logs:       pm2 logs $APP_NAME"
-echo "   • Monitor:         pm2 monit"
-echo "   • Stop:            pm2 stop $APP_NAME"
-echo "   • Restart:         pm2 restart $APP_NAME"
-echo "   • Delete:          pm2 delete $APP_NAME"
-echo "   • View status:     pm2 status"
-echo "   • View details:    pm2 show $APP_NAME"
-echo ""
-
-# Display current status
-print_message "📊 Current Status:" "$BLUE"
-pm2 status
-
-# Setup PM2 to start on system boot (optional)
-echo ""
-print_message "💡 Tip: To make PM2 start on system boot, run:" "$YELLOW"
-echo "   pm2 startup"
-echo "   Then run the command it provides"
 
