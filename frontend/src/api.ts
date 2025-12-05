@@ -563,4 +563,89 @@ export async function syncThumbnails(): Promise<void> {
   }
 }
 
+// ===== File Content Operations =====
+
+export async function readFileContent(
+  filePath: string,
+  tenantId?: string | null
+): Promise<string> {
+  try {
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+    const { data } = await api.get<{ success: boolean; content: string }>(
+      `/file-content?path=${encodeURIComponent(filePath)}`,
+      { params }
+    );
+    return data.content || '';
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function writeFileContent(
+  filePath: string,
+  content: string,
+  tenantId?: string | null
+): Promise<void> {
+  try {
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+    await api.post(
+      '/file-content',
+      { path: filePath, content },
+      { params }
+    );
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+// ===== Super Admin System Resources =====
+
+export interface SystemResources {
+  disk: {
+    total: number;
+    used: number;
+    available: number;
+    usedPercent: number;
+  };
+  memory: {
+    total: number;
+    used: number;
+    available: number;
+    usedPercent: number;
+  };
+  cpu: {
+    cores: number;
+    model: string;
+    usagePercent: number;
+    loadAverage: number[];
+  };
+  system: {
+    platform: string;
+    uptime: number;
+    nodeVersion: string;
+  };
+  storage: {
+    totalUsed: number;
+    growthRate: number;
+  };
+  sessions: {
+    active: number;
+  };
+}
+
+export async function getSystemResources(): Promise<SystemResources> {
+  try {
+    const { data } = await api.get<{ success: boolean; resources: SystemResources }>('/super-admin/system-resources');
+    return data.resources;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
 export default api;

@@ -15,12 +15,12 @@ import { useFiles, useModal, useApp, useUI } from '../store';
 import type { FileItem } from '../types';
 import { FileGridIcon } from './FileIcon';
 import TenantItem from './TenantItem';
-import { formatFileSize, cn, isImageFile, isVideoFile } from '../utils';
+import { formatFileSize, cn, isImageFile, isVideoFile, isTextFile } from '../utils';
 import * as api from '../api';
 
 export default function FileGrid() {
   const { optimisticFiles, selectedFiles, toggleFileSelection, loadFiles, currentPath } = useFiles();
-  const { showToast, user, currentTenantId, setCurrentTenantId } = useApp();
+  const { showToast, user, currentTenantId, setCurrentTenantId, openEditor } = useApp();
   const { openModal } = useModal();
   const { viewMode } = useUI();
 
@@ -44,6 +44,9 @@ export default function FileGrid() {
       if (foundIndex >= 0) {
         openModal('slideshow', { initialIndex: foundIndex });
       }
+    } else if (isTextFile(file.name)) {
+      // For text files, open in integrated editor
+      openEditor(file.path, file.name);
     } else {
       // For other file types, open in new tab with tenant context
       let tenantId: string | null = currentTenantId;

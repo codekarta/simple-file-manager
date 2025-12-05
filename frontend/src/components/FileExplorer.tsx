@@ -6,6 +6,8 @@ import FileTable from './FileTable';
 import FileGrid from './FileGrid';
 import Pagination from './Pagination';
 import EmptyState from './EmptyState';
+import FileEditor from './FileEditor';
+import SystemResourcesDashboard from './SystemResourcesDashboard';
 import { LoadingOverlay } from './Spinner';
 import { formatFileSize, cn } from '../utils';
 import * as api from '../api';
@@ -26,7 +28,7 @@ export default function FileExplorer() {
   const { optimisticFiles, isLoading, currentPath, loadFiles } = useFiles();
   const { viewMode, searchQuery, showToast } = useUI();
   const { refreshStorageInfo } = useStorage();
-  const { user, currentTenantId } = useApp();
+  const { user, currentTenantId, openFile, closeEditor } = useApp();
 
   // Drag and drop state
   const [isDragging, setIsDragging] = useState(false);
@@ -265,7 +267,17 @@ export default function FileExplorer() {
         )}
       </AnimatePresence>
 
-      {isEmpty ? (
+      {/* Show editor if file is open, otherwise show file list or dashboard */}
+      {openFile ? (
+        <FileEditor
+          filePath={openFile.path}
+          fileName={openFile.name}
+          onClose={closeEditor}
+        />
+      ) : user?.role === 'super_admin' && !currentTenantId && currentPath === '' && !searchQuery ? (
+        // Show system resources dashboard for super admin at home
+        <SystemResourcesDashboard />
+      ) : isEmpty ? (
         <EmptyState
           type={searchQuery ? 'search' : 'empty'}
           searchQuery={searchQuery}

@@ -3,12 +3,14 @@ import { motion } from 'framer-motion';
 import { Home, ChevronRight, Edit2 } from 'lucide-react';
 import { useFiles, useApp } from '../store';
 import { cn } from '../utils';
+import * as api from '../api';
 
 export default function Breadcrumb() {
   const { currentPath, loadFiles } = useFiles();
   const { user, currentTenantId, setCurrentTenantId } = useApp();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
+  const [tenantName, setTenantName] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const parts = currentPath ? currentPath.split('/').filter(Boolean) : [];
@@ -19,6 +21,33 @@ export default function Breadcrumb() {
       inputRef.current.select();
     }
   }, [isEditing]);
+
+  // Load tenant name when currentTenantId changes
+  useEffect(() => {
+    const loadTenantName = async () => {
+      if (!currentTenantId) {
+        setTenantName(null);
+        return;
+      }
+
+      // Only super admins can list tenants to get names
+      if (user?.role !== 'super_admin') {
+        setTenantName(null);
+        return;
+      }
+
+      try {
+        const tenants = await api.listTenants();
+        const tenant = tenants.find((t) => t.tenantId === currentTenantId);
+        setTenantName(tenant?.name || null);
+      } catch (error) {
+        console.error('Failed to load tenant name:', error);
+        setTenantName(null);
+      }
+    };
+
+    loadTenantName();
+  }, [currentTenantId, user?.role]);
 
   const handleStartEdit = () => {
     setEditValue(currentPath ? `/${currentPath}` : '/');
@@ -91,8 +120,8 @@ export default function Breadcrumb() {
           </button>
           <ChevronRight className="w-4 h-4 text-subtle shrink-0" />
           <span className="px-2 py-1 text-sm text-muted">Tenant:</span>
-          <span className="px-2 py-1 text-sm font-medium text-primary">
-            {currentTenantId.substring(0, 8)}...
+          <span className="px-2 py-1 text-sm font-medium text-primary truncate max-w-[200px]" title={tenantName || currentTenantId}>
+            {tenantName || currentTenantId.substring(0, 8) + '...'}
           </span>
           <ChevronRight className="w-4 h-4 text-subtle shrink-0" />
         </>

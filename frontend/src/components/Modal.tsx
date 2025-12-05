@@ -10,7 +10,7 @@ interface ModalProps {
   description?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   closeOnOverlayClick?: boolean;
   showCloseButton?: boolean;
 }
@@ -51,7 +51,8 @@ export default function Modal({
     sm: 'max-w-sm',
     md: 'max-w-md',
     lg: 'max-w-lg',
-    xl: 'max-w-2xl',
+    xl: 'max-w-4xl',
+    full: 'max-w-[95vw]',
   };
 
   return (
@@ -77,7 +78,8 @@ export default function Modal({
             className={cn(
               'relative w-full mx-4',
               'bg-surface border border-border',
-              'flex flex-col max-h-[90vh]',
+              'flex flex-col',
+              size === 'full' ? 'max-h-[95vh]' : 'max-h-[90vh]',
               sizes[size]
             )}
           >
@@ -108,7 +110,9 @@ export default function Modal({
             )}
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4">{children}</div>
+            <div className={cn('flex-1 overflow-y-auto', size === 'full' ? '' : 'p-4')}>
+              {children}
+            </div>
 
             {/* Footer */}
             {footer && (

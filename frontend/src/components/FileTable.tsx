@@ -15,13 +15,13 @@ import type { FileItem } from '../types';
 import FileIcon from './FileIcon';
 import { AccessBadge } from './Badge';
 import TenantItem from './TenantItem';
-import { formatFileSize, formatDateTime, cn, isImageFile, isVideoFile } from '../utils';
+import { formatFileSize, formatDateTime, cn, isImageFile, isVideoFile, isTextFile } from '../utils';
 import * as api from '../api';
 import { useState } from 'react';
 
 export default function FileTable() {
   const { optimisticFiles, selectedFiles, toggleFileSelection, selectAllFiles, clearSelection, loadFiles, currentPath } = useFiles();
-  const { showToast, user, currentTenantId, setCurrentTenantId } = useApp();
+  const { showToast, user, currentTenantId, setCurrentTenantId, openEditor } = useApp();
   const { openModal } = useModal();
   const { viewMode } = useUI();
 
@@ -56,6 +56,9 @@ export default function FileTable() {
       if (foundIndex >= 0) {
         openModal('slideshow', { initialIndex: foundIndex });
       }
+    } else if (isTextFile(file.name)) {
+      // For text files, open in integrated editor
+      openEditor(file.path, file.name);
     } else {
       // For other file types, open in new tab with tenant context
       let tenantId: string | null = currentTenantId;

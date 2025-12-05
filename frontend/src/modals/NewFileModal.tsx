@@ -95,7 +95,7 @@ export default function NewFileModal() {
         </div>
 
         <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-border">
-          <Button variant="secondary" onClick={handleClose} disabled={isPending}>
+          <Button type="button" variant="secondary" onClick={handleClose} disabled={isPending}>
             Cancel
           </Button>
           <Button type="submit" variant="primary" loading={isPending}>

@@ -69,6 +69,11 @@ interface AppContextValue {
   // Toast/notification
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   toast: { message: string; type: 'success' | 'error' | 'info' } | null;
+
+  // Editor state
+  openFile: { path: string; name: string } | null;
+  openEditor: (path: string, name: string) => void;
+  closeEditor: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -124,6 +129,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Editor state
+  const [openFile, setOpenFile] = useState<{ path: string; name: string } | null>(null);
 
   // Persist UI preferences
   const setViewMode = useCallback((mode: 'grid' | 'table') => {
@@ -340,6 +348,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
+  // Editor functions
+  const openEditor = useCallback((path: string, name: string) => {
+    setOpenFile({ path, name });
+  }, []);
+
+  const closeEditor = useCallback(() => {
+    setOpenFile(null);
+  }, []);
+
   // Track if initial data has been loaded
   const initialLoadDone = useRef(false);
 
@@ -424,6 +441,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Toast
     showToast,
     toast,
+
+    // Editor
+    openFile,
+    openEditor,
+    closeEditor,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -146,6 +146,78 @@ export function isAudioFile(filename: string): boolean {
   return audioExtensions.includes(getFileExtension(filename));
 }
 
+// Check if file is a text-based file that can be edited
+export function isTextFile(filename: string): boolean {
+  const textExtensions = [
+    'txt', 'md', 'html', 'htm', 'css', 'scss', 'sass', 'less', 'js', 'jsx', 'ts', 'tsx',
+    'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'config',
+    'py', 'java', 'c', 'cpp', 'cc', 'cxx', 'h', 'hpp', 'php', 'rb', 'go', 'rs',
+    'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd',
+    'sql', 'r', 'm', 'swift', 'kt', 'scala', 'clj', 'hs', 'ml', 'fs',
+    'vue', 'svelte', 'astro', 'jsx', 'tsx',
+    'log', 'env', 'gitignore', 'dockerfile', 'makefile',
+    'csv', 'tsv', 'diff', 'patch'
+  ];
+  return textExtensions.includes(getFileExtension(filename));
+}
+
+// Get Monaco editor language from file extension
+export function getMonacoLanguage(filename: string): string {
+  const ext = getFileExtension(filename);
+  const languageMap: Record<string, string> = {
+    'js': 'javascript',
+    'jsx': 'javascript',
+    'ts': 'typescript',
+    'tsx': 'typescript',
+    'html': 'html',
+    'htm': 'html',
+    'css': 'css',
+    'scss': 'scss',
+    'sass': 'sass',
+    'less': 'less',
+    'json': 'json',
+    'xml': 'xml',
+    'yaml': 'yaml',
+    'yml': 'yaml',
+    'py': 'python',
+    'java': 'java',
+    'c': 'c',
+    'cpp': 'cpp',
+    'h': 'c',
+    'hpp': 'cpp',
+    'php': 'php',
+    'rb': 'ruby',
+    'go': 'go',
+    'rs': 'rust',
+    'sh': 'shell',
+    'bash': 'shell',
+    'zsh': 'shell',
+    'fish': 'shell',
+    'ps1': 'powershell',
+    'bat': 'bat',
+    'cmd': 'bat',
+    'sql': 'sql',
+    'r': 'r',
+    'swift': 'swift',
+    'kt': 'kotlin',
+    'scala': 'scala',
+    'vue': 'html',
+    'svelte': 'html',
+    'md': 'markdown',
+    'log': 'plaintext',
+    'txt': 'plaintext',
+    'env': 'plaintext',
+    'gitignore': 'plaintext',
+    'dockerfile': 'dockerfile',
+    'makefile': 'makefile',
+    'csv': 'csv',
+    'tsv': 'plaintext',
+    'diff': 'diff',
+    'patch': 'diff',
+  };
+  return languageMap[ext] || 'plaintext';
+}
+
 // Generate random password
 export function generatePassword(length: number = 16): string {
   const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';

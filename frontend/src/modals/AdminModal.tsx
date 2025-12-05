@@ -21,6 +21,8 @@ export default function AdminModal() {
   const { user: currentUser } = useAuth();
   const { activeModal, closeModal } = useModal();
   const { showToast } = useApp();
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const isTenantAdmin = currentUser?.role === 'tenant_admin';
 
   const [users, setUsers] = useState<UserItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,13 +48,18 @@ export default function AdminModal() {
   const loadUsers = async () => {
     setIsLoading(true);
     try {
-      // Only load super admin users (users without tenantId)
-      const userList = await api.listUsers();
-      // Filter to only show super admin users (no tenantId) or super_admin role
-      const superAdminUsers = userList.filter(
-        (u) => !u.tenantId && (u.role === 'super_admin' || currentUser?.role === 'super_admin')
-      );
-      setUsers(superAdminUsers);
+      // For tenant admin: API automatically filters by their tenantId
+      // For super admin: Load without tenantId to get all users, then filter to only super admin users
+      let userList: UserItem[];
+      if (isTenantAdmin) {
+        // Tenant admin - API will automatically filter by their tenantId
+        userList = await api.listUsers();
+      } else {
+        // Super admin - load all users then filter to only super admin users (no tenantId)
+        userList = await api.listUsers();
+        userList = userList.filter((u) => !u.tenantId);
+      }
+      setUsers(userList);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Failed to load users', 'error');
     } finally {
@@ -81,14 +88,21 @@ export default function AdminModal() {
       }
 
       try {
-        // AdminModal is for super admin users only - don't assign tenantId
-        // Super admin can create other super admin users or tenant admins without tenantId
+        // Determine tenantId based on current user role
+        let tenantId: string | undefined = undefined;
+        if (isTenantAdmin && currentUser?.tenantId) {
+          // Tenant admin creates users in their tenant
+          tenantId = currentUser.tenantId;
+        } else if (isSuperAdmin) {
+          // Super admin creates users without tenantId (super admin users)
+          tenantId = undefined;
+        }
         
         const newUser = await api.createUser(
           username.trim(),
           role || 'user',
           password,
-          undefined // No tenantId for super admin users
+          tenantId
         );
         showToast(`User "${newUser.username}" created`, 'success');
         alert(`User created!\n\nUsername: ${newUser.username}\nPassword: ${newUser.password}\nRole: ${newUser.role}\n\nPlease save this password securely.`);
@@ -142,7 +156,7 @@ export default function AdminModal() {
       <Modal
         isOpen={isOpen}
         onClose={closeModal}
-        title="User Management"
+        title={isTenantAdmin ? "Tenant User Management" : "User Management"}
         size="xl"
       >
         {/* Create User Form */}
@@ -179,12 +193,12 @@ export default function AdminModal() {
                 className="h-9 px-3 text-sm bg-surface border border-border focus:outline-none focus:border-primary"
               >
                 <option value="user">User</option>
-                {currentUser?.role === 'super_admin' ? (
+                {isSuperAdmin ? (
                   <>
                     <option value="super_admin">Super Admin</option>
                     <option value="tenant_admin">Tenant Admin</option>
                   </>
-                ) : currentUser?.role === 'tenant_admin' ? (
+                ) : isTenantAdmin ? (
                   <option value="tenant_admin">Tenant Admin</option>
                 ) : null}
               </select>

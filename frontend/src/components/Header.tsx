@@ -19,6 +19,7 @@ import {
 import { useFiles, useUI, useModal, useStorage } from '../store';
 import Button from './Button';
 import Breadcrumb from './Breadcrumb';
+import Tooltip from './Tooltip';
 import { cn, formatFileSize, debounce } from '../utils';
 
 interface HeaderProps {
@@ -270,64 +271,69 @@ export default function Header({ onMenuClick }: HeaderProps) {
 
         {/* View controls */}
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<RefreshCw className="w-4 h-4" />}
-            onClick={handleRefresh}
-            title="Refresh"
-          />
+          <Tooltip content="Refresh" position="bottom">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<RefreshCw className="w-4 h-4" />}
+              onClick={handleRefresh}
+            />
+          </Tooltip>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<Play className="w-4 h-4" />}
-            onClick={() => openModal('slideshow')}
-            title="Slideshow"
-          />
+          <Tooltip content="Play Slideshow" position="bottom">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Play className="w-4 h-4" />}
+              onClick={() => openModal('slideshow')}
+            />
+          </Tooltip>
           
-          <button
-            onClick={() => setShowHiddenFiles(!showHiddenFiles)}
-            className={cn(
-              'p-2 transition-colors',
-              showHiddenFiles
-                ? 'text-primary bg-primary-subtle'
-                : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
-            )}
-            title={showHiddenFiles ? 'Hide hidden files' : 'Show hidden files'}
-          >
-            {showHiddenFiles ? (
-              <Eye className="w-4 h-4" />
-            ) : (
-              <EyeOff className="w-4 h-4" />
-            )}
-          </button>
-
-          <div className="flex border border-border">
+          <Tooltip content={showHiddenFiles ? 'Hide hidden files' : 'Show hidden files'} position="bottom">
             <button
-              onClick={() => setViewMode('grid')}
+              onClick={() => setShowHiddenFiles(!showHiddenFiles)}
               className={cn(
                 'p-2 transition-colors',
-                viewMode === 'grid'
-                  ? 'bg-primary text-white'
+                showHiddenFiles
+                  ? 'text-primary bg-primary-subtle'
                   : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
               )}
-              title="Grid view"
             >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('table')}
-              className={cn(
-                'p-2 transition-colors border-l border-border',
-                viewMode === 'table'
-                  ? 'bg-primary text-white'
-                  : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
+              {showHiddenFiles ? (
+                <Eye className="w-4 h-4" />
+              ) : (
+                <EyeOff className="w-4 h-4" />
               )}
-              title="Table view"
-            >
-              <LayoutList className="w-4 h-4" />
             </button>
+          </Tooltip>
+
+          <div className="flex border border-border">
+            <Tooltip content="Grid view" position="bottom">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={cn(
+                  'p-2 transition-colors',
+                  viewMode === 'grid'
+                    ? 'bg-primary text-white'
+                    : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
+                )}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Table view" position="bottom">
+              <button
+                onClick={() => setViewMode('table')}
+                className={cn(
+                  'p-2 transition-colors border-l border-border',
+                  viewMode === 'table'
+                    ? 'bg-primary text-white'
+                    : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
+                )}
+              >
+                <LayoutList className="w-4 h-4" />
+              </button>
+            </Tooltip>
           </div>
         </div>
       </div>

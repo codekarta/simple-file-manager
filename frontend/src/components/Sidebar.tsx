@@ -2,7 +2,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home,
   Files,
-  Clock,
   Book,
   Info,
   Key,
@@ -18,6 +17,7 @@ import {
 import { useApp, useAuth, useUI, useModal } from '../store';
 import { cn } from '../utils';
 import { RoleBadge } from './Badge';
+import Tooltip from './Tooltip';
 
 interface SidebarProps {
   isMobileOpen?: boolean;
@@ -50,8 +50,7 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
 
   const navItems = [
     { icon: Home, label: 'Home', path: '', active: currentPath === '' },
-    { icon: Files, label: 'All Files', path: '', active: false },
-    { icon: Clock, label: 'Recent', path: '', active: false, disabled: true },
+    ...(isSuperAdmin ? [] : [{ icon: Files, label: 'All Files', path: '', active: false }]),
   ];
 
   const utilityItems = [
@@ -77,8 +76,12 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
     { icon: Key, label: 'API Token', onClick: () => handleOpenModal('user') },
     ...(isAdmin
       ? [
-          { icon: Settings, label: 'Settings', onClick: () => handleOpenModal('settings') },
           { icon: Users, label: 'Users', onClick: () => handleOpenModal('admin') },
+        ]
+      : []),
+    ...(isSuperAdmin
+      ? [
+          { icon: Settings, label: 'Settings', onClick: () => handleOpenModal('settings') },
         ]
       : []),
   ];
@@ -132,24 +135,32 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
               Navigation
             </div>
           )}
-          {navItems.map((item) => (
-            <button
-              key={item.label}
-              onClick={() => !item.disabled && handleNavigation(item.path)}
-              disabled={item.disabled}
-              className={cn(
-                'w-full flex items-center gap-3 px-2 py-2 text-sm transition-colors mb-1',
-                item.active
-                  ? 'bg-sidebar-hover text-sidebar-active'
-                  : 'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse',
-                item.disabled && 'opacity-50 cursor-not-allowed',
-                sidebarCollapsed && 'justify-center'
-              )}
-            >
-              <item.icon className="w-4 h-4 shrink-0" />
-              {!sidebarCollapsed && <span>{item.label}</span>}
-            </button>
-          ))}
+          {navItems.map((item) => {
+            const button = (
+              <button
+                key={item.label}
+                onClick={() => handleNavigation(item.path)}
+                className={cn(
+                  'w-full flex items-center text-sm transition-colors mb-1',
+                  sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-2 py-2',
+                  item.active
+                    ? 'bg-sidebar-hover text-sidebar-active'
+                    : 'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse'
+                )}
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                {!sidebarCollapsed && <span>{item.label}</span>}
+              </button>
+            );
+
+            return sidebarCollapsed ? (
+              <Tooltip key={item.label} content={item.label} position="right">
+                {button}
+              </Tooltip>
+            ) : (
+              button
+            );
+          })}
         </div>
 
         {/* Tenants (Super Admin) */}
@@ -160,20 +171,30 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
                 Tenants
               </div>
             )}
-            {tenantItems.map((item) => (
-              <button
-                key={item.label}
-                onClick={item.onClick}
-                className={cn(
-                  'w-full flex items-center gap-3 px-2 py-2 text-sm transition-colors mb-1',
-                  'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse',
-                  sidebarCollapsed && 'justify-center'
-                )}
-              >
-                <item.icon className="w-4 h-4 shrink-0" />
-                {!sidebarCollapsed && <span>{item.label}</span>}
-              </button>
-            ))}
+            {tenantItems.map((item) => {
+              const button = (
+                <button
+                  key={item.label}
+                  onClick={item.onClick}
+                  className={cn(
+                    'w-full flex items-center text-sm transition-colors mb-1',
+                    sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-2 py-2',
+                    'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse'
+                  )}
+                >
+                  <item.icon className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>{item.label}</span>}
+                </button>
+              );
+
+              return sidebarCollapsed ? (
+                <Tooltip key={item.label} content={item.label} position="right">
+                  {button}
+                </Tooltip>
+              ) : (
+                button
+              );
+            })}
           </div>
         )}
 
@@ -184,17 +205,17 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
               Resources
             </div>
           )}
-          {utilityItems.map((item) =>
-            item.href ? (
+          {utilityItems.map((item) => {
+            const linkOrButton = item.href ? (
               <a
                 key={item.label}
                 href={item.href}
                 target={item.external ? '_blank' : undefined}
                 rel={item.external ? 'noopener noreferrer' : undefined}
                 className={cn(
-                  'w-full flex items-center gap-3 px-2 py-2 text-sm transition-colors mb-1',
-                  'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse',
-                  sidebarCollapsed && 'justify-center'
+                  'w-full flex items-center text-sm transition-colors mb-1',
+                  sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-2 py-2',
+                  'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse'
                 )}
               >
                 <item.icon className="w-4 h-4 shrink-0" />
@@ -205,16 +226,24 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
                 key={item.label}
                 onClick={item.onClick}
                 className={cn(
-                  'w-full flex items-center gap-3 px-2 py-2 text-sm transition-colors mb-1',
-                  'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse',
-                  sidebarCollapsed && 'justify-center'
+                  'w-full flex items-center text-sm transition-colors mb-1',
+                  sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-2 py-2',
+                  'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse'
                 )}
               >
                 <item.icon className="w-4 h-4 shrink-0" />
                 {!sidebarCollapsed && <span>{item.label}</span>}
               </button>
-            )
-          )}
+            );
+
+            return sidebarCollapsed ? (
+              <Tooltip key={item.label} content={item.label} position="right">
+                {linkOrButton}
+              </Tooltip>
+            ) : (
+              linkOrButton
+            );
+          })}
         </div>
 
         {/* Settings */}
@@ -224,20 +253,30 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
               Settings
             </div>
           )}
-          {settingsItems.map((item) => (
-            <button
-              key={item.label}
-              onClick={item.onClick}
-              className={cn(
-                'w-full flex items-center gap-3 px-2 py-2 text-sm transition-colors mb-1',
-                'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse',
-                sidebarCollapsed && 'justify-center'
-              )}
-            >
-              <item.icon className="w-4 h-4 shrink-0" />
-              {!sidebarCollapsed && <span>{item.label}</span>}
-            </button>
-          ))}
+          {settingsItems.map((item) => {
+            const button = (
+              <button
+                key={item.label}
+                onClick={item.onClick}
+                className={cn(
+                  'w-full flex items-center text-sm transition-colors mb-1',
+                  sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-2 py-2',
+                  'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse'
+                )}
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                {!sidebarCollapsed && <span>{item.label}</span>}
+              </button>
+            );
+
+            return sidebarCollapsed ? (
+              <Tooltip key={item.label} content={item.label} position="right">
+                {button}
+              </Tooltip>
+            ) : (
+              button
+            );
+          })}
         </div>
       </nav>
 
@@ -263,17 +302,29 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
             </div>
           )}
         </div>
-        <button
-          onClick={handleLogout}
-          className={cn(
-            'w-full flex items-center gap-3 px-2 py-2 mt-2 text-sm transition-colors',
-            'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse',
-            sidebarCollapsed && 'justify-center'
-          )}
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          {!sidebarCollapsed && <span>Logout</span>}
-        </button>
+{(() => {
+          const logoutButton = (
+            <button
+              onClick={handleLogout}
+              className={cn(
+                'w-full flex items-center mt-2 text-sm transition-colors',
+                sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-2 py-2',
+                'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse'
+              )}
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span>Logout</span>}
+            </button>
+          );
+
+          return sidebarCollapsed ? (
+            <Tooltip content="Logout" position="right">
+              {logoutButton}
+            </Tooltip>
+          ) : (
+            logoutButton
+          );
+        })()}
       </div>
     </div>
   );

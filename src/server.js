@@ -6,7 +6,11 @@ import path from 'path';
 import fs from 'fs/promises';
 import { existsSync, statSync, createReadStream } from 'fs';
 import { fileURLToPath } from 'url';
-import { homedir } from 'os';
+import { homedir, totalmem, freemem, cpus, uptime, loadavg, platform } from 'os';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 import archiver from 'archiver';
 import * as credentialsManager from './credentials-manager.js';
 import * as fileCache from './file-cache.js';
@@ -731,6 +735,236 @@ app.put('/api/super-admin/tenants/:tenantId', requireAuth, requireSuperAdmin, as
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+// Get system resources (super admin only)
+app.get('/api/super-admin/system-resources', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    // Memory information
+    const totalMem = totalmem();
+    const freeMem = freemem();
+    const usedMem = totalMem - freeMem;
+    const memUsagePercent = (usedMem / totalMem) * 100;
+
+    // CPU information
+    const cpuInfo = cpus();
+    const cpuCount = cpuInfo.length;
+    
+    // Calculate CPU usage by measuring over time
+    let cpuUsagePercent = 0;
+    if (cpuInfo.length > 0) {
+      // Get initial CPU times
+      const startMeasure = cpus().map(cpu => ({
+        idle: cpu.times.idle,
+        total: cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq
+      }));
+      
+      // Wait 100ms and measure again
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const endMeasure = cpus().map(cpu => ({
+        idle: cpu.times.idle,
+        total: cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq
+      }));
+      
+      // Calculate average CPU usage across all cores
+      let totalUsage = 0;
+      for (let i = 0; i < cpuInfo.length; i++) {
+        const idle = endMeasure[i].idle - startMeasure[i].idle;
+        const total = endMeasure[i].total - startMeasure[i].total;
+        const usage = 100 - (idle / total) * 100;
+        totalUsage += Math.max(0, Math.min(100, usage)); // Clamp between 0-100
+      }
+      cpuUsagePercent = totalUsage / cpuInfo.length;
+    }
+
+    // Disk space information (for the filesystem containing uploads directory)
+    let diskTotal = 0;
+    let diskUsed = 0;
+    let diskAvailable = 0;
+    
+    try {
+      const uploadPath = uploadsPath;
+      
+      // Get disk space using system command (cross-platform)
+      if (platform() !== 'win32') {
+        // Unix/Mac: use df command
+        try {
+          const { stdout } = await execAsync(`df -k "${uploadPath}" | tail -1`);
+          const parts = stdout.trim().split(/\s+/);
+          if (parts.length >= 4) {
+            // df output: Filesystem, 1K-blocks, Used, Available, Use%, Mounted on
+            diskTotal = parseInt(parts[1]) * 1024; // Convert KB to bytes
+            diskUsed = parseInt(parts[2]) * 1024;
+            diskAvailable = parseInt(parts[3]) * 1024;
+          }
+        } catch (err) {
+          console.error('Error getting disk space via df:', err.message);
+        }
+      } else {
+        // Windows: use wmic or PowerShell
+        try {
+          const { stdout } = await execAsync(`wmic logicaldisk get size,freespace,caption | findstr "${uploadPath.charAt(0)}"`);
+          const parts = stdout.trim().split(/\s+/);
+          if (parts.length >= 3) {
+            diskAvailable = parseInt(parts[0]);
+            diskTotal = parseInt(parts[1]);
+            diskUsed = diskTotal - diskAvailable;
+          }
+        } catch (err) {
+          console.error('Error getting disk space on Windows:', err.message);
+        }
+      }
+      
+      // Fallback: if system commands fail, estimate from uploads directory size
+      if (diskTotal === 0 && existsSync(uploadPath)) {
+        async function calculateDirSize(dirPath) {
+          let size = 0;
+          try {
+            const items = await fs.readdir(dirPath, { withFileTypes: true });
+            for (const item of items) {
+              if (item.isSymbolicLink()) continue;
+              const fullPath = path.join(dirPath, item.name);
+              try {
+                if (item.isDirectory()) {
+                  size += await calculateDirSize(fullPath);
+                } else {
+                  const stats = await fs.stat(fullPath);
+                  size += stats.size;
+                }
+              } catch (err) {
+                // Skip files that can't be accessed
+              }
+            }
+          } catch (err) {
+            // Directory might not be readable
+          }
+          return size;
+        }
+        
+        diskUsed = await calculateDirSize(uploadPath);
+        // For fallback, we can't determine total/available without system info
+        diskTotal = diskUsed * 2; // Rough estimate
+        diskAvailable = diskTotal - diskUsed;
+      }
+    } catch (error) {
+      console.error('Error calculating disk space:', error);
+    }
+
+    // Active sessions count
+    let activeSessions = 0;
+    try {
+      const sessionStore = req.sessionStore;
+      if (sessionStore && typeof sessionStore.all === 'function') {
+        const sessions = await new Promise((resolve, reject) => {
+          sessionStore.all((err, sessions) => {
+            if (err) reject(err);
+            else resolve(sessions || {});
+          });
+        });
+        activeSessions = Object.keys(sessions).length;
+      } else if (sessionStore && typeof sessionStore.length === 'function') {
+        activeSessions = await new Promise((resolve, reject) => {
+          sessionStore.length((err, count) => {
+            if (err) reject(err);
+            else resolve(count || 0);
+          });
+        });
+      }
+    } catch (error) {
+      console.error('Error counting sessions:', error);
+      activeSessions = 0;
+    }
+
+    // Calculate total storage used (across all tenants)
+    let totalStorageUsed = 0;
+    try {
+      const tenants = await credentialsManager.listTenants();
+      
+      async function calculateTenantStorage(tenantId) {
+        const tenantBasePath = path.join(uploadsPath, tenantId);
+        if (!existsSync(tenantBasePath)) return 0;
+        
+        let size = 0;
+        async function calculateSize(dirPath) {
+          if (!existsSync(dirPath)) return;
+          try {
+            const items = await fs.readdir(dirPath, { withFileTypes: true });
+            for (const item of items) {
+              if (item.isSymbolicLink()) continue;
+              const fullPath = path.join(dirPath, item.name);
+              try {
+                if (item.isDirectory()) {
+                  await calculateSize(fullPath);
+                } else {
+                  const stats = await fs.stat(fullPath);
+                  size += stats.size;
+                }
+              } catch (err) {
+                // Skip inaccessible files
+              }
+            }
+          } catch (err) {
+            // Skip inaccessible directories
+          }
+        }
+        
+        await calculateSize(tenantBasePath);
+        return size;
+      }
+      
+      for (const tenant of tenants) {
+        totalStorageUsed += await calculateTenantStorage(tenant.tenantId);
+      }
+    } catch (error) {
+      console.error('Error calculating total storage:', error);
+    }
+
+    // Storage growth rate (simplified - would need historical data for accurate forecasting)
+    // For now, return basic info that can be tracked over time
+    const storageGrowthRate = 0; // Would need historical tracking
+
+    // Get system uptime
+    const systemUptime = uptime();
+
+    res.json({
+      success: true,
+      resources: {
+        disk: {
+          total: diskTotal,
+          used: diskUsed,
+          available: diskAvailable,
+          usedPercent: diskTotal > 0 ? (diskUsed / diskTotal) * 100 : 0
+        },
+        memory: {
+          total: totalMem,
+          used: usedMem,
+          available: freeMem,
+          usedPercent: memUsagePercent
+        },
+        cpu: {
+          cores: cpuCount,
+          model: cpuInfo[0]?.model || 'Unknown',
+          usagePercent: cpuUsagePercent,
+          loadAverage: platform() !== 'win32' ? loadavg() : [0, 0, 0]
+        },
+        system: {
+          platform: process.platform,
+          uptime: systemUptime,
+          nodeVersion: process.version
+        },
+        storage: {
+          totalUsed: totalStorageUsed,
+          growthRate: storageGrowthRate // Bytes per hour (calculated from historical data)
+        },
+        sessions: {
+          active: activeSessions
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -1571,6 +1805,104 @@ app.delete('/api/delete', requireAuth, async (req, res) => {
     }
     
     res.json({ success: true, message: 'Deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Read file content as text (tenant-aware)
+app.get('/api/file-content', requireAuth, async (req, res) => {
+  try {
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
+    const filePath = req.query.path;
+    
+    if (!filePath) {
+      return res.status(400).json({ error: 'File path is required' });
+    }
+    
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+    
+    const fullPath = resolveTenantFilePath(tenantId, filePath, uploadsPath);
+    const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
+    
+    // Security check: prevent directory traversal
+    if (!fullPath.startsWith(expectedBase)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    // Check if file exists and is a file (not directory)
+    try {
+      const stats = await fs.stat(fullPath);
+      if (stats.isDirectory()) {
+        return res.status(400).json({ error: 'Path is a directory, not a file' });
+      }
+    } catch (error) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    // Read file content as text
+    const content = await fs.readFile(fullPath, 'utf8');
+    
+    res.json({ success: true, content });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Write file content (tenant-aware)
+app.post('/api/file-content', requireAuth, async (req, res) => {
+  try {
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
+    const { path: filePath, content } = req.body;
+    
+    if (!filePath) {
+      return res.status(400).json({ error: 'File path is required' });
+    }
+    
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+    
+    const fullPath = resolveTenantFilePath(tenantId, filePath, uploadsPath);
+    const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
+    
+    // Security check: prevent directory traversal
+    if (!fullPath.startsWith(expectedBase)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    // Check if file exists and is a file (not directory)
+    try {
+      const stats = await fs.stat(fullPath);
+      if (stats.isDirectory()) {
+        return res.status(400).json({ error: 'Path is a directory, not a file' });
+      }
+    } catch (error) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    // Write file content as text
+    await fs.writeFile(fullPath, content || '', 'utf8');
+    
+    res.json({ success: true, message: 'File saved successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
