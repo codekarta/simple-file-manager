@@ -10,7 +10,7 @@ import * as api from '../api';
 export default function NewFileModal() {
   const { currentPath, loadFiles } = useFiles();
   const { activeModal, closeModal } = useModal();
-  const { showToast } = useApp();
+  const { showToast, user, currentTenantId } = useApp();
   const { refreshStorageInfo } = useStorage();
 
   const [isPrivate, setIsPrivate] = useState(false);
@@ -38,7 +38,13 @@ export default function NewFileModal() {
       }
 
       try {
-        await api.createFile(currentPath, name.trim(), content || '', isPrivate ? 'private' : 'public');
+        // Determine tenantId
+        let tenantId: string | null = currentTenantId;
+        if (!tenantId && user?.tenantId) {
+          tenantId = user.tenantId;
+        }
+        
+        await api.createFile(currentPath, name.trim(), content || '', isPrivate ? 'private' : 'public', tenantId);
         showToast(`File "${name}" created`, 'success');
         loadFiles(currentPath);
         refreshStorageInfo();

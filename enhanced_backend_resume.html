@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shiva R Thanet - Full Stack & Java Backend Developer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', 'Helvetica', 'Arial', sans-serif;
+            line-height: 1.3;
+            margin: 0;
+            padding: 0;
+            color: #000;
+            font-size: 13px;
+            background-color: white;
+        }
+        
+        .container {
+            max-width: 8.5in;
+            margin: 0 auto;
+            padding: 0.75in;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+        }
+        
+        .name {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            letter-spacing: 1px;
+        }
+        
+        .title {
+            font-size: 13px;
+            margin-bottom: 8px;
+            font-weight: normal;
+        }
+        
+        .contact-info {
+            font-size: 13px;
+            line-height: 1.3;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .key-achievements-section {
+            margin-bottom: 15px;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-bottom: 1px solid #000;
+            padding-bottom: 3px;
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+        }
+        
+        .subsection {
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+            border-bottom: 0.5px solid #ccc;
+            padding-bottom: 15px;
+        }
+        
+        .subsection:last-child {
+            border-bottom: none;
+        }
+        
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 3px;
+            flex-wrap: wrap;
+        }
+        
+        .company {
+            font-weight: bold;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+        
+        .job-title {
+            font-size: 13px;
+            font-weight: normal;
+        }
+        
+        .location-date {
+            font-size: 13px;
+            text-align: right;
+            font-weight: normal;
+        }
+        
+        .skills-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 8px;
+        }
+        
+        .skills-table td {
+            vertical-align: top;
+            padding: 5px 8px;
+            width: 25%;
+        }
+        
+        .skill-category {
+            margin-bottom: 8px;
+        }
+        
+        .skill-title {
+            font-weight: bold;
+            font-size: 13px;
+            margin-bottom: 3px;
+            text-decoration: underline;
+        }
+        
+        .skill-list {
+            font-size: 13px;
+            line-height: 1.3;
+            list-style-type: disc;
+            padding-left: 15px;
+        }
+        
+        ul {
+            margin: 5px 0;
+            padding-left: 15px;
+        }
+        
+        li {
+            margin-bottom: 2px;
+            line-height: 1.3;
+        }
+        
+        .professional-summary {
+            margin-bottom: 8px;
+        }
+        
+        .professional-summary p {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.4;
+            text-align: justify;
+        }
+        
+        .education {
+            font-size: 13px;
+        }
+        
+        .degree {
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+        
+        .achievements ul {
+            margin: 5px 0;
+        }
+        
+        .achievements li {
+            margin-bottom: 3px;
+            line-height: 1.3;
+        }
+        
+        .environment {
+            font-size: 13px;
+            margin-top: 5px;
+            font-weight: normal;
+        }
+        
+        /* Print optimizations */
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+                margin: 0;
+                font-size: 13px;
+            }
+            .container {
+                padding: 12px;
+                max-width: none;
+            }
+            .header {
+                margin-bottom: 10px;
+                padding-bottom: 5px;
+            }
+            .name {
+                margin-bottom: 1px;
+                font-size: 18px;
+            }
+            .title {
+                margin-bottom: 3px;
+                font-size: 13px;
+            }
+            .contact-info {
+                font-size: 12px;
+            }
+            .subsection {
+                page-break-inside: avoid;
+                border-bottom: 0.5px solid #ccc;
+                margin-bottom: 18px;
+                padding-bottom: 12px;
+            }
+            .section {
+                page-break-inside: avoid;
+                margin-bottom: 14px;
+            }
+            .section:nth-child(5) {
+                page-break-before: avoid;
+            }
+            .key-achievements-section {
+                page-break-inside: avoid;
+                page-break-after: avoid;
+                margin-bottom: 14px;
+            }
+            .professional-summary {
+                margin-bottom: 8px;
+            }
+            .professional-summary p {
+                line-height: 1.25;
+                margin: 0;
+                font-size: 13px;
+            }
+            .skills-table {
+                margin-bottom: 2px;
+            }
+            .skills-table td {
+                padding: 2px 4px;
+            }
+            .skill-category {
+                margin-bottom: 3px;
+            }
+            .skill-title {
+                margin-bottom: 1px;
+                font-size: 13px;
+            }
+            .skill-list {
+                line-height: 1.15;
+                padding-left: 10px;
+                font-size: 12px;
+            }
+            .section-title {
+                margin-bottom: 6px;
+                padding-bottom: 2px;
+                font-size: 14px;
+            }
+            .achievements ul {
+                margin: 1px 0;
+                padding-left: 10px;
+            }
+            .achievements li {
+                margin-bottom: 0.5px;
+                line-height: 1.15;
+                font-size: 13px;
+                page-break-inside: avoid;
+            }
+            ul {
+                margin: 2px 0;
+                padding-left: 10px;
+            }
+            li {
+                margin-bottom: 0.5px;
+                line-height: 1.15;
+            }
+            /* Force first page content to stay together */
+            .first-page-content {
+                page-break-inside: avoid;
+                orphans: 10;
+                widows: 10;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="first-page-content">
+            <div class="header">
+                <div class="name">SHIVA R THANET</div>
+                <div class="title">Full Stack & Java Backend Developer</div>
+                <div class="contact-info">
+                    Email: shivarajthanet@gmail.com | Phone: (520) 328-4899<br>
+                    Location: Arizona, USA (US Citizen)
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Professional Summary</div>
+                <div class="professional-summary">
+                    <p>Results-driven Full Stack & Java Backend Developer with 10+ years of experience in enterprise-grade application development, specializing in Java/J2EE ecosystems, microservices architecture, and cloud computing. Strong expertise in Spring Framework, React.js, AWS Cloud Services, modern UI development with Tailwind CSS, and AI-powered development tools including Cursor AI and GitHub Copilot. Proven track record delivering mission-critical solutions for Federal Government, Banking, Financial Services, and Insurance domains.</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Technical Skills</div>
+                <table class="skills-table">
+                    <tr>
+                        <td>
+                            <div class="skill-category">
+                                <div class="skill-title">Programming Languages</div>
+                                <ul class="skill-list">
+                                    <li>Java 8/11/17</li>
+                                    <li>JavaScript/TypeScript</li>
+                                    <li>Python</li>
+                                    <li>Kotlin</li>
+                                    <li>Scala</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="skill-category">
+                                <div class="skill-title">Frontend Technologies</div>
+                                <ul class="skill-list">
+                                    <li>React.js/Next.js</li>
+                                    <li>Angular 2/4/6/8</li>
+                                    <li>Vue.js</li>
+                                    <li>HTML5/CSS3</li>
+                                    <li>Bootstrap/jQuery</li>
+                                    <li>Tailwind CSS</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="skill-category">
+                                <div class="skill-title">Backend Frameworks</div>
+                                <ul class="skill-list">
+                                    <li>Spring Boot/MVC</li>
+                                    <li>Spring Security/Data</li>
+                                    <li>Node.js/Express.js</li>
+                                    <li>Bun.sh/Hono</li>
+                                    <li>Hibernate/JPA</li>
+                                    <li>Microservices</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="skill-category">
+                                <div class="skill-title">Web Services & APIs</div>
+                                <ul class="skill-list">
+                                    <li>RESTful APIs</li>
+                                    <li>SOAP Services</li>
+                                    <li>Apache Kafka</li>
+                                    <li>Event-Driven Arch</li>
+                                    <li>JMS/IBM MQ</li>
+                                    <li>OpenAPI</li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="skill-category">
+                                <div class="skill-title">Databases & ORM</div>
+                                <ul class="skill-list">
+                                    <li>PostgreSQL/MySQL</li>
+                                    <li>Oracle 11g/13c</li>
+                                    <li>MongoDB</li>
+                                    <li>Cassandra</li>
+                                    <li>Redis/DynamoDB</li>
+                                    <li>Hibernate ORM</li>
+                                    <li>Prisma</li>
+                                    <li>PL/SQL</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="skill-category">
+                                <div class="skill-title">Cloud & DevOps</div>
+                                <ul class="skill-list">
+                                    <li>AWS (EC2, S3, Lambda, RDS)</li>
+                                    <li>Cloudflare</li>
+                                    <li>Docker/Kubernetes</li>
+                                    <li>Jenkins CI/CD</li>
+                                    <li>Maven/Gradle</li>
+                                    <li>Git/Azure DevOps</li>
+                                    <li>Terraform</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="skill-category">
+                                <div class="skill-title">Testing & Quality</div>
+                                <ul class="skill-list">
+                                    <li>JUnit/Mockito</li>
+                                    <li>Jest/Mocha</li>
+                                    <li>SonarQube/Jacoco</li>
+                                    <li>Selenium/Cucumber</li>
+                                    <li>TDD/BDD</li>
+                                    <li>Postman</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="skill-category">
+                                <div class="skill-title">AI & Development Tools</div>
+                                <ul class="skill-list">
+                                    <li>Cursor AI</li>
+                                    <li>GitHub Copilot</li>
+                                    <li>Windsurf AI</li>
+                                    <li>IntelliJ/Eclipse</li>
+                                    <li>Spring Tool Suite</li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="section key-achievements-section">
+                <div class="section-title">Key Achievements</div>
+                <div class="achievements">
+                    <ul>
+                        <li>Successfully architected and delivered enterprise-grade applications serving Federal Government and Fortune 500 clients</li>
+                        <li>Achieved 95%+ test coverage standards consistently across multiple projects using comprehensive testing frameworks</li>
+                        <li>Led migration of legacy applications to cloud-native solutions, resulting in improved scalability and reduced operational costs</li>
+                        <li>Implemented zero-downtime deployment strategies using Docker containerization and Kubernetes orchestration</li>
+                        <li>Mentored junior developers and contributed to establishing coding standards and best practices across development teams</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Education</div>
+            <div class="education">
+                <div class="degree">M.Sc. in Forestry Science and Technology (2013)</div>
+                Tribhuvan University, Nepal<br><br>
+                <div class="degree">B.Sc. in Forestry Science and Technology (2011)</div>
+                HNB Garhwal University, India
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Professional Experience</div>
+            
+            <div class="subsection">
+                <div class="job-header">
+                    <div>
+                        <div class="company">Kroger</div>
+                        <div class="job-title">Software Engineer</div>
+                    </div>
+                    <div class="location-date">
+                        Blue Ash, OH<br>
+                        Dec 2024 - July 2025
+                    </div>
+                </div>
+                <ul>
+                    <li>Designed and implemented RESTful API services using Kotlin and Spring Boot with comprehensive OpenAPI documentation</li>
+                    <li>Architected microservices following hexagonal architecture patterns with domain/infrastructure separation</li>
+                    <li>Implemented Spring Security with OAuth2 and JWT for secure authentication and role-based authorization</li>
+                    <li>Optimized database queries and implemented connection pooling with HikariCP for PostgreSQL interactions</li>
+                    <li>Developed custom Spring Boot starters for cross-cutting concerns (logging, monitoring, error handling)</li>
+                    <li>Built asynchronous processing pipelines using Spring WebFlux and Kotlin coroutines</li>
+                    <li>Implemented distributed caching strategies using Redis to reduce database load and improve response times</li>
+                    <li>Created API integration tests using TestContainers and WireMock</li>
+                    <li>Configured Kubernetes deployments with health checks, resource limits, and autoscaling</li>
+                    <li>Established CI/CD pipelines using Jenkins with automated testing and multi-stage deployments</li>
+                    <li>Utilized GitHub for version control with Git flow branching strategy</li>
+                    <li>Implemented infrastructure as code using Terraform for managing AWS resources and deployment environments</li>
+                </ul>
+                <div class="environment"><strong>Environment:</strong> Java, Spring Boot, Kotlin, Docker, Kubernetes, Postgres, Terraform, OpenAPI, Redis, Jenkins, OAuth2, JWT</div>
+            </div>
+
+            <div class="subsection">
+                <div class="job-header">
+                    <div>
+                        <div class="company">Cigna</div>
+                        <div class="job-title">Application Development Senior Advisor</div>
+                    </div>
+                    <div class="location-date">
+                        Bloomfield, CT<br>
+                        Aug 2022 - Nov 2024
+                    </div>
+                </div>
+                <ul>
+                    <li>Architected facade layer microservices using Spring Boot to bridge legacy SOAP APIs with REST endpoints</li>
+                    <li>Implemented Spring Cloud Gateway for API routing, rate limiting, and circuit breaker patterns using Resilience4j</li>
+                    <li>Designed event-driven architecture using Apache Kafka for real-time data streaming</li>
+                    <li>Built reactive backend services with Spring WebFlux and Project Reactor for non-blocking I/O operations</li>
+                    <li>Implemented logging and distributed tracing using ELK stack and Spring Cloud Sleuth</li>
+                    <li>Developed custom Spring AOP aspects for cross-cutting concerns including audit logging and performance monitoring</li>
+                    <li>Optimized Oracle database performance through query tuning, indexing strategies, and PL/SQL stored procedures</li>
+                    <li>Created batch processing jobs using Spring Batch for large-scale data migration and transformation tasks</li>
+                    <li>Implemented security best practices (SQL injection prevention, input validation, encryption)</li>
+                    <li>Built Node.js backend services with Express.js and TypeScript for lightweight microservices architecture</li>
+                    <li>Designed AWS infrastructure using Terraform (VPC, security groups, IAM policies)</li>
+                    <li>Developed ETL pipeline using Python and AWS Lambda for RDS data synchronization</li>
+                    <li>Integrated AWS SQS for asynchronous message processing and SNS for pub/sub notification patterns</li>
+                    <li>Configured CloudWatch alarms, metrics, and dashboards for system monitoring</li>
+                    <li>Established Jenkins CI/CD pipelines with automated deployment to multiple AWS environments</li>
+                </ul>
+                <div class="environment"><strong>Environment:</strong> Java, Spring Boot, Spring Cloud, Apache Kafka, Resilience4j, Angular, TypeScript, Node.js, Oracle, PL/SQL, Python, AWS (Terraform, Jenkins, DynamoDB, Lambda, VPC, RDS, SQS, SNS), CloudWatch, ELK Stack</div>
+            </div>
+
+            <div class="subsection">
+                <div class="job-header">
+                    <div>
+                        <div class="company">Hughes Network System</div>
+                        <div class="job-title">Sr. Java Developer</div>
+                    </div>
+                    <div class="location-date">
+                        San Diego, CA<br>
+                        Nov 2021 - Jul 2022
+                    </div>
+                </div>
+                <ul>
+                    <li>Designed and implemented microservices architecture using Spring Boot with service discovery via Eureka</li>
+                    <li>Developed RESTful web services with Spring MVC and integrated API versioning strategies</li>
+                    <li>Implemented database connection pooling and transaction management using Spring Data JPA and Hibernate</li>
+                    <li>Built message-driven architecture using RabbitMQ for asynchronous communication between services</li>
+                    <li>Migrated legacy Java 7 monolithic application to Kotlin microservices using coroutines</li>
+                    <li>Implemented comprehensive exception handling and global error responses using Spring AOP</li>
+                    <li>Designed and implemented multi-database architecture supporting PostgreSQL, MySQL, and MongoDB</li>
+                    <li>Created containerized deployments using Docker Compose and Docker Swarm</li>
+                    <li>Implemented Kubernetes StatefulSets and ConfigMaps for database and configuration management</li>
+                    <li>Implemented blue-green deployment strategies in AWS EKS</li>
+                    <li>Integrated Prometheus and Grafana for application performance monitoring</li>
+                    <li>Applied machine learning models for network traffic prediction and load balancing</li>
+                    <li>Implemented API gateway patterns with request/response transformation and authentication filters</li>
+                    <li>Designed Internal Developer Platform with self-service APIs for infrastructure provisioning</li>
+                </ul>
+                <div class="environment"><strong>Environment:</strong> Java 8, Kotlin, Spring Boot, Spring Cloud, Eureka, RabbitMQ, AWS EKS, Docker, Kubernetes, MySQL, MongoDB, PostgreSQL, Prometheus, Grafana</div>
+            </div>
+
+            <div class="subsection">
+                <div class="job-header">
+                    <div>
+                        <div class="company">T-Mobile</div>
+                        <div class="job-title">Java Full Stack Developer</div>
+                    </div>
+                    <div class="location-date">
+                        Bothell, WA<br>
+                        Jan 2020 - Oct 2021
+                    </div>
+                </div>
+                <ul>
+                    <li>Architected microservices using Spring Boot with Spring Cloud Config</li>
+                    <li>Implemented RESTful web services with Spring MVC and integrated Swagger/OpenAPI for API documentation</li>
+                    <li>Developed SOAP web services using Apache CXF framework with WSDL-first approach</li>
+                    <li>Built asynchronous processing using Java 8 CompletableFuture and reactive programming</li>
+                    <li>Implemented Spring Security with custom authentication providers</li>
+                    <li>Designed database schema and optimized queries using Hibernate ORM with Ehcache</li>
+                    <li>Created Spring Data JPA repositories with custom query methods and Specification API for dynamic queries</li>
+                    <li>Implemented transaction management using Spring @Transactional</li>
+                    <li>Utilized Java 8 functional programming (Lambda, Streams, Optional)</li>
+                    <li>Developed batch processing services using Spring Batch for scheduled data processing jobs</li>
+                    <li>Containerized Spring Boot microservices using Docker and deployed to Amazon ECS clusters</li>
+                    <li>Configured AWS Application Load Balancers for traffic distribution across multiple EC2 instances</li>
+                    <li>Implemented service-to-service communication using Feign clients and Ribbon</li>
+                    <li>Integrated AWS CloudWatch for logging and custom metrics</li>
+                    <li>Enhanced web pages using HTML5, CSS3, AngularJS, Ajax, Bootstrap, and JSP</li>
+                </ul>
+                <div class="environment"><strong>Environment:</strong> Java 8, Spring Boot, Spring Cloud, Apache CXF, Angular, AWS ECS, Docker, Microservices, Hibernate, MySQL, Feign, Ribbon, Ehcache</div>
+            </div>
+
+            <div class="subsection">
+                <div class="job-header">
+                    <div>
+                        <div class="company">EHarmony</div>
+                        <div class="job-title">Java Full Stack Developer</div>
+                    </div>
+                    <div class="location-date">
+                        Los Angeles, CA<br>
+                        Jul 2018 - Dec 2019
+                    </div>
+                </div>
+                <ul>
+                    <li>Designed RESTful APIs using Spring Boot with content negotiation and serialization</li>
+                    <li>Developed microservices architecture using Spring Boot with service registry and API gateway</li>
+                    <li>Implemented Spring MVC with J2EE design patterns (DAO, Service, Factory)</li>
+                    <li>Built authentication and authorization layer using Spring Security with custom UserDetailsService</li>
+                    <li>Designed Oracle database schema with normalization and created complex PL/SQL procedures for business logic</li>
+                    <li>Optimized database performance through query tuning, indexing, and execution plan analysis</li>
+                    <li>Implemented Spring Data JPA with custom repository implementations and query derivation</li>
+                    <li>Developed reactive endpoints using Spring WebFlux for handling high-concurrency scenarios</li>
+                    <li>Created scheduled jobs using Spring @Scheduled and Quartz scheduler</li>
+                    <li>Implemented exception handling with custom exception classes and global handlers</li>
+                    <li>Built serverless functions using AWS Lambda with Java runtime for event-driven processing</li>
+                    <li>Deployed infrastructure using AWS CloudFormation templates for consistent environment provisioning</li>
+                    <li>Configured AWS S3 with lifecycle policies and cross-region replication</li>
+                    <li>Integrated AWS RDS with automated backups and read replicas</li>
+                    <li>Created project layouts using jQuery, CSS/LESS, HTML5, and React JS</li>
+                </ul>
+                <div class="environment"><strong>Environment:</strong> Java, Spring Boot, Spring WebFlux, AWS Lambda, CloudFormation, React JS, Angular JS, Oracle 10g, Quartz, AWS S3, RDS</div>
+            </div>
+
+            <div class="subsection">
+                <div class="job-header">
+                    <div>
+                        <div class="company">DentaQuest</div>
+                        <div class="job-title">Java Full Stack Developer</div>
+                    </div>
+                    <div class="location-date">
+                        Boston, MA<br>
+                        Jan 2017 - Jun 2018
+                    </div>
+                </div>
+                <ul>
+                    <li>Architected serverless applications using Java with AWS Lambda for event-driven backend services</li>
+                    <li>Implemented DynamoDB data modeling with global secondary indexes and optimized query patterns</li>
+                    <li>Built RESTful microservices using Spring Boot with Spring Data REST for automatic API generation</li>
+                    <li>Migrated legacy Struts framework to Spring MVC with annotation-based configuration</li>
+                    <li>Developed Spring Boot actuator endpoints for health checks and application metrics monitoring</li>
+                    <li>Implemented Spring AOP for logging, transaction management, and performance measurement</li>
+                    <li>Created Oracle database procedures and functions for complex business rule processing</li>
+                    <li>Optimized Hibernate queries using criteria API and HQL with join fetch strategies</li>
+                    <li>Implemented Spring Security OAuth2 for token-based authentication and authorization</li>
+                    <li>Developed Docker Compose configurations for multi-container application orchestration</li>
+                    <li>Created custom Docker images with optimized layers and implemented multi-stage builds</li>
+                    <li>Configured AWS API Gateway to trigger Lambda functions with request/response mapping templates</li>
+                    <li>Implemented AWS Step Functions for orchestrating complex serverless workflows</li>
+                    <li>Built CI/CD pipeline using Jenkins with automated testing and deployment to AWS environments</li>
+                    <li>Built interactive widgets using HTML5, CSS, AJAX and JSF for dynamic user interfaces</li>
+                </ul>
+                <div class="environment"><strong>Environment:</strong> Java, Spring Boot, Spring Security, Docker, AWS Lambda, DynamoDB, API Gateway, Step Functions, Oracle 11g, Hibernate, Jenkins</div>
+            </div>
+
+            <div class="subsection">
+                <div class="job-header">
+                    <div>
+                        <div class="company">Discover Financial Services</div>
+                        <div class="job-title">Java Developer</div>
+                    </div>
+                    <div class="location-date">
+                        Riverwoods, IL<br>
+                        Jul 2015 - Dec 2016
+                    </div>
+                </div>
+                <ul>
+                    <li>Developed REST microservices using Spring Cloud with Eureka for service discovery and Zuul for API gateway</li>
+                    <li>Implemented circuit breaker patterns using Netflix Hystrix for fault tolerance and resilience</li>
+                    <li>Built microservices using both Java and Scala with Akka framework for actor-based concurrency</li>
+                    <li>Designed Oracle database schemas and created complex SQL queries with joins, subqueries, and analytical functions</li>
+                    <li>Implemented Spring Data JPA with specification pattern for dynamic query building</li>
+                    <li>Developed RESTful services with JSON serialization using Jackson</li>
+                    <li>Implemented Spring Boot application with embedded Tomcat and externalized configuration</li>
+                    <li>Created Spring profiles for environment-specific configurations (dev, test, prod)</li>
+                    <li>Integrated Spring Actuator for monitoring application health, metrics, and environment properties</li>
+                    <li>Implemented distributed logging using Logback with centralized log aggregation</li>
+                    <li>Deployed microservices to AWS EC2 with Auto Scaling and Elastic Load Balancers</li>
+                    <li>Configured AWS CloudFormation and CodeDeploy for infrastructure and deployments</li>
+                    <li>Built Maven multi-module projects with dependency management and plugin configurations</li>
+                    <li>Enhanced responsive UI using HTML5, CSS3, JavaScript, and Angular JS</li>
+                </ul>
+                <div class="environment"><strong>Environment:</strong> Java, Scala, Spring Boot, Spring Cloud, Eureka, Hystrix, Akka, Angular JS, AWS EC2, Oracle 11g, Maven, Jackson</div>
+            </div>
+
+            <div class="subsection">
+                <div class="job-header">
+                    <div>
+                        <div class="company">Comcast</div>
+                        <div class="job-title">Java Developer</div>
+                    </div>
+                    <div class="location-date">
+                        Denver, CO<br>
+                        Jul 2014 - Jun 2015
+                    </div>
+                </div>
+                <ul>
+                    <li>Architected application using J2EE Model View Controller (MVC) pattern with clear separation of concerns</li>
+                    <li>Developed EJB session beans for business logic encapsulation</li>
+                    <li>Implemented Struts Framework with action classes, form beans, and declarative validation</li>
+                    <li>Created EJB deployment descriptors using XML and configured JNDI lookups for resource management</li>
+                    <li>Utilized JAXB for XML to Java object binding and marshalling/unmarshalling</li>
+                    <li>Implemented multi-threading for parallel data processing with thread pools and concurrent collections</li>
+                    <li>Developed complex PL/SQL stored procedures, functions, packages, and triggers in Oracle 10g</li>
+                    <li>Optimized database performance through proper indexing, partition strategies, and query optimization</li>
+                    <li>Configured JDBC connection pooling with DataSource</li>
+                    <li>Implemented transaction management using Container Managed Transactions (CMT) with EJB</li>
+                    <li>Configured Struts framework files (struts-config.xml, tiles-def.xml)</li>
+                    <li>Developed dynamic JSP pages with JSTL tags and custom tag libraries for reusable components</li>
+                    <li>Implemented Struts Validator framework for server-side form validation with regex patterns</li>
+                    <li>Deployed applications to WebSphere Application Server with clustering and session replication</li>
+                    <li>Performed JVM tuning (heap size, garbage collection, thread stack management)</li>
+                    <li>Implemented auto-completion and client-side validation using jQuery for enhanced user experience</li>
+                </ul>
+                <div class="environment"><strong>Environment:</strong> JAVA/J2EE, EJB, JSP, Servlets, Struts 2.0, HTML, CSS, JavaScript, jQuery, JAXB, JBoss, WebSphere, Oracle 10g, PL/SQL, JDBC, SVN, SQL Developer, DOJO</div>
+            </div>
+
+           
+        </div>
+    </div>
+</body>
+</html>

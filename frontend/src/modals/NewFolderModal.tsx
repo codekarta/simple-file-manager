@@ -10,7 +10,7 @@ import * as api from '../api';
 export default function NewFolderModal() {
   const { currentPath, loadFiles } = useFiles();
   const { activeModal, closeModal } = useModal();
-  const { showToast } = useApp();
+  const { showToast, user, currentTenantId } = useApp();
   const { refreshStorageInfo } = useStorage();
 
   const [isPrivate, setIsPrivate] = useState(false);
@@ -32,7 +32,13 @@ export default function NewFolderModal() {
       }
 
       try {
-        await api.createFolder(currentPath, name.trim(), isPrivate ? 'private' : 'public');
+        // Determine tenantId
+        let tenantId: string | null = currentTenantId;
+        if (!tenantId && user?.tenantId) {
+          tenantId = user.tenantId;
+        }
+        
+        await api.createFolder(currentPath, name.trim(), isPrivate ? 'private' : 'public', tenantId);
         showToast(`Folder "${name}" created`, 'success');
         loadFiles(currentPath);
         refreshStorageInfo();

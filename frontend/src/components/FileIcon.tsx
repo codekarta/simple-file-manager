@@ -9,6 +9,7 @@ import {
   FileArchive,
   FileSpreadsheet,
   Presentation,
+  Building2,
 } from 'lucide-react';
 import { getFileExtension, isImageFile } from '../utils';
 import { cn } from '../utils';
@@ -19,6 +20,7 @@ interface FileIconProps {
   thumbnailUrl?: string | null;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  isTenant?: boolean;
 }
 
 export default function FileIcon({
@@ -27,6 +29,7 @@ export default function FileIcon({
   thumbnailUrl,
   size = 'md',
   className,
+  isTenant = false,
 }: FileIconProps) {
   const sizes = {
     sm: { wrapper: 'w-8 h-8', icon: 'w-4 h-4', thumb: 'w-8 h-8' },
@@ -59,7 +62,7 @@ export default function FileIcon({
   }
 
   // Get icon and colors based on file type
-  const { icon: IconComponent, bgColor, color } = getIconConfig(name, isDirectory);
+  const { icon: IconComponent, bgColor, color } = getIconConfig(name, isDirectory, isTenant);
 
   return (
     <div
@@ -75,8 +78,17 @@ export default function FileIcon({
   );
 }
 
-function getIconConfig(name: string, isDirectory: boolean) {
+function getIconConfig(name: string, isDirectory: boolean, isTenant: boolean = false) {
   if (isDirectory) {
+    if (isTenant) {
+      // Tenant folder - use building icon with distinct color
+      return {
+        icon: Building2,
+        bgColor: '#e0e7ff',
+        color: '#4f46e5',
+      };
+    }
+    // Regular folder
     return {
       icon: Folder,
       bgColor: '#fff7ed',
@@ -147,9 +159,10 @@ interface FileGridItemProps {
   name: string;
   isDirectory: boolean;
   thumbnailUrl?: string | null;
+  isTenant?: boolean;
 }
 
-export function FileGridIcon({ name, isDirectory, thumbnailUrl }: FileGridItemProps) {
+export function FileGridIcon({ name, isDirectory, thumbnailUrl, isTenant = false }: FileGridItemProps) {
   // Show thumbnail for images
   if (!isDirectory && thumbnailUrl && isImageFile(name)) {
     return (
@@ -167,7 +180,7 @@ export function FileGridIcon({ name, isDirectory, thumbnailUrl }: FileGridItemPr
     );
   }
 
-  const { icon: IconComponent, bgColor, color } = getIconConfig(name, isDirectory);
+  const { icon: IconComponent, bgColor, color } = getIconConfig(name, isDirectory, isTenant);
 
   return (
     <div

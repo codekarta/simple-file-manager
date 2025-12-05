@@ -11,7 +11,7 @@ import * as api from '../api';
 export default function UploadModal() {
   const { currentPath, loadFiles } = useFiles();
   const { activeModal, closeModal } = useModal();
-  const { showToast } = useApp();
+  const { showToast, user, currentTenantId } = useApp();
   const { refreshStorageInfo } = useStorage();
 
   const [files, setFiles] = useState<File[]>([]);
@@ -82,12 +82,19 @@ export default function UploadModal() {
           ? files.map((f) => (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name)
           : undefined;
 
+      // Determine tenantId
+      let tenantId: string | null = currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      
       await api.uploadFiles(
         files,
         currentPath,
         isPrivate ? 'private' : 'public',
         relativePaths,
-        setUploadProgress
+        setUploadProgress,
+        tenantId
       );
 
       showToast(`${files.length} file(s) uploaded successfully`, 'success');

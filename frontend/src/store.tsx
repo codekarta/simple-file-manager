@@ -16,13 +16,17 @@ interface AppContextValue {
   checkAuth: () => Promise<void>;
   refreshUser: () => Promise<void>;
 
+  // Tenant state
+  currentTenantId: string | null;
+  setCurrentTenantId: (tenantId: string | null) => void;
+
   // File state
   currentPath: string;
   files: FileItem[];
   pagination: Pagination | null;
   selectedFiles: Set<string>;
   setCurrentPath: (path: string) => void;
-  loadFiles: (path?: string, page?: number) => Promise<void>;
+  loadFiles: (path?: string, page?: number, tenantIdOverride?: string | null) => Promise<void>;
   searchFiles: (query: string, regex?: boolean) => Promise<void>;
   selectFile: (path: string) => void;
   deselectFile: (path: string) => void;
@@ -74,6 +78,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Tenant state
+  const [currentTenantId, setCurrentTenantId] = useState<string | null>(() =>
+    getStorageItem('currentTenantId', null)
+  );
 
   // File state
   const [currentPath, setCurrentPath] = useState('');
@@ -182,16 +191,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Tenant functions
+  const setCurrentTenantIdWithStorage = useCallback((tenantId: string | null) => {
+    setCurrentTenantId(tenantId);
+    setStorageItem('currentTenantId', tenantId);
+    // Reset path when switching tenants
+    setCurrentPath('');
+    setFiles([]);
+    setPagination(null);
+  }, []);
+
   // File functions
-  const loadFiles = useCallback(async (path?: string, page?: number) => {
+  const loadFiles = useCallback(async (path?: string, page?: number, tenantIdOverride?: string | null) => {
     try {
       setIsLoading(true);
       const targetPath = path ?? currentPath;
+      
+      // Determine tenantId: use override if provided, otherwise currentTenantId, or user's tenantId, or null for super admin
+      let tenantId: string | null = tenantIdOverride !== undefined ? tenantIdOverride : currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      // Super admin can view all tenants or root (null)
+      
       const response = await api.getFiles(
         targetPath,
         page || 1,
         itemsPerPage,
-        showHiddenFiles
+        showHiddenFiles,
+        tenantId
       );
       setFiles(response.items);
       setPagination(response.pagination);
@@ -207,7 +235,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPath, itemsPerPage, showHiddenFiles]);
+  }, [currentPath, itemsPerPage, showHiddenFiles, currentTenantId, user]);
 
   const searchFilesHandler = useCallback(async (query: string, regex?: boolean) => {
     if (!query.trim()) {
@@ -216,12 +244,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     try {
       setIsSearching(true);
+      
+      // Determine tenantId
+      let tenantId: string | null = currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      
       const response = await api.searchFiles(
         query,
         regex ?? isRegexSearch,
         1,
         itemsPerPage,
-        showHiddenFiles
+        showHiddenFiles,
+        tenantId
       );
       setFiles(response.results);
       setPagination(response.pagination);
@@ -233,7 +269,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSearching(false);
     }
-  }, [currentPath, isRegexSearch, itemsPerPage, showHiddenFiles, loadFiles]);
+  }, [currentPath, isRegexSearch, itemsPerPage, showHiddenFiles, loadFiles, currentTenantId, user]);
 
   // Selection functions
   const selectFile = useCallback((path: string) => {
@@ -334,6 +370,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     logout,
     checkAuth,
     refreshUser,
+
+    // Tenant
+    currentTenantId,
+    setCurrentTenantId: setCurrentTenantIdWithStorage,
 
     // Files
     currentPath,

@@ -7,7 +7,7 @@ import * as api from '../api';
 export default function DeleteModal() {
   const { currentPath, loadFiles, deleteFileOptimistic } = useFiles();
   const { activeModal, modalData, closeModal } = useModal();
-  const { showToast } = useApp();
+  const { showToast, user, currentTenantId } = useApp();
   const { refreshStorageInfo } = useStorage();
 
   const [isDeleting, setIsDeleting] = useState(false);
@@ -24,11 +24,17 @@ export default function DeleteModal() {
       let successCount = 0;
       let errorCount = 0;
 
+      // Determine tenantId
+      let tenantId: string | null = currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      
       for (const path of data.paths) {
         try {
           // Optimistic update
           deleteFileOptimistic(path);
-          await api.deleteItem(path);
+          await api.deleteItem(path, tenantId);
           successCount++;
         } catch {
           errorCount++;

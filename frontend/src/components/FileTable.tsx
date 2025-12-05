@@ -10,18 +10,20 @@ import {
   Move,
   Link as LinkIcon,
 } from 'lucide-react';
-import { useFiles, useModal, useApp } from '../store';
+import { useFiles, useModal, useApp, useUI } from '../store';
 import type { FileItem } from '../types';
 import FileIcon from './FileIcon';
 import { AccessBadge } from './Badge';
+import TenantItem from './TenantItem';
 import { formatFileSize, formatDateTime, cn, isImageFile, isVideoFile } from '../utils';
 import * as api from '../api';
 import { useState } from 'react';
 
 export default function FileTable() {
   const { optimisticFiles, selectedFiles, toggleFileSelection, selectAllFiles, clearSelection, loadFiles, currentPath } = useFiles();
-  const { showToast } = useApp();
+  const { showToast, user, currentTenantId, setCurrentTenantId } = useApp();
   const { openModal } = useModal();
+  const { viewMode } = useUI();
 
   const allSelected = optimisticFiles.length > 0 && selectedFiles.size === optimisticFiles.length;
   const someSelected = selectedFiles.size > 0 && !allSelected;
@@ -36,7 +38,15 @@ export default function FileTable() {
 
   const handleFileClick = (file: FileItem) => {
     if (file.isDirectory) {
-      loadFiles(file.path);
+      // If it's a tenant folder (marked with isTenant), switch to that tenant
+      if (file.isTenant && user?.role === 'super_admin') {
+        const tenantId = file.path; // file.path is the tenantId for tenant folders
+        setCurrentTenantId(tenantId);
+        // Pass tenantId directly to avoid race condition with state update
+        loadFiles('', 1, tenantId);
+      } else {
+        loadFiles(file.path);
+      }
     } else if (isImageFile(file.name) || isVideoFile(file.name)) {
       // Open gallery/slideshow for images and videos
       const mediaFiles = optimisticFiles.filter(
@@ -47,14 +57,23 @@ export default function FileTable() {
         openModal('slideshow', { initialIndex: foundIndex });
       }
     } else {
-      // For other file types, open in new tab (existing behavior)
-      window.open(`/${file.path}`, '_blank');
+      // For other file types, open in new tab with tenant context
+      let tenantId: string | null = currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      const fileUrl = api.getFileUrl(file.path, tenantId);
+      window.open(fileUrl, '_blank');
     }
   };
 
   const handleDownload = (e: React.MouseEvent, path: string) => {
     e.stopPropagation();
-    window.location.href = api.getDownloadUrl(path);
+    let tenantId: string | null = currentTenantId;
+    if (!tenantId && user?.tenantId) {
+      tenantId = user.tenantId;
+    }
+    window.location.href = api.getDownloadUrl(path, tenantId);
   };
 
   const handleRename = (e: React.MouseEvent, file: FileItem) => {
@@ -71,7 +90,11 @@ export default function FileTable() {
     e.stopPropagation();
     try {
       const newLevel = file.accessLevel === 'private' ? 'public' : 'private';
-      await api.updateAccessLevel(file.path, newLevel);
+      let tenantId: string | null = currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      await api.updateAccessLevel(file.path, newLevel, tenantId);
       showToast(`Changed to ${newLevel}`, 'success');
       loadFiles(currentPath);
     } catch (error) {
@@ -82,7 +105,11 @@ export default function FileTable() {
   const handleDuplicate = async (e: React.MouseEvent, file: FileItem) => {
     e.stopPropagation();
     try {
-      await api.duplicateItem(file.path);
+      let tenantId: string | null = currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      await api.duplicateItem(file.path, tenantId);
       showToast(`Duplicated "${file.name}"`, 'success');
       loadFiles(currentPath);
     } catch (error) {
@@ -139,23 +166,39 @@ export default function FileTable() {
           </tr>
         </thead>
         <tbody>
-          {optimisticFiles.map((file, index) => (
-            <FileTableRow
-              key={file.path}
-              file={file}
-              index={index}
-              isSelected={selectedFiles.has(file.path)}
-              onToggleSelect={() => toggleFileSelection(file.path)}
-              onClick={() => handleFileClick(file)}
-              onDownload={(e) => handleDownload(e, file.path)}
-              onDuplicate={(e) => handleDuplicate(e, file)}
-              onMove={(e) => handleMove(e, file)}
-              onCopyLink={(e) => handleCopyLink(e, file)}
-              onRename={(e) => handleRename(e, file)}
-              onDelete={(e) => handleDelete(e, file)}
-              onToggleAccess={(e) => handleToggleAccess(e, file)}
-            />
-          ))}
+          {optimisticFiles.map((file, index) => {
+            // Use TenantItem for tenant folders
+            if (file.isTenant && file.isDirectory) {
+              return (
+                <TenantItem
+                  key={file.path}
+                  file={file}
+                  index={index}
+                  isSelected={selectedFiles.has(file.path)}
+                  onToggleSelect={() => toggleFileSelection(file.path)}
+                  viewMode={viewMode}
+                />
+              );
+            }
+            // Regular file row
+            return (
+              <FileTableRow
+                key={file.path}
+                file={file}
+                index={index}
+                isSelected={selectedFiles.has(file.path)}
+                onToggleSelect={() => toggleFileSelection(file.path)}
+                onClick={() => handleFileClick(file)}
+                onDownload={(e) => handleDownload(e, file.path)}
+                onDuplicate={(e) => handleDuplicate(e, file)}
+                onMove={(e) => handleMove(e, file)}
+                onCopyLink={(e) => handleCopyLink(e, file)}
+                onRename={(e) => handleRename(e, file)}
+                onDelete={(e) => handleDelete(e, file)}
+                onToggleAccess={(e) => handleToggleAccess(e, file)}
+              />
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -219,6 +262,7 @@ function FileTableRow({
             isDirectory={file.isDirectory}
             thumbnailUrl={file.thumbnailUrl}
             size="sm"
+            isTenant={file.isTenant}
           />
           <div className="min-w-0">
             <div className="flex items-center gap-2">

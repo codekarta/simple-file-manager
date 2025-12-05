@@ -12,6 +12,8 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  List,
+  Plus,
 } from 'lucide-react';
 import { useApp, useAuth, useUI, useModal } from '../store';
 import { cn } from '../utils';
@@ -24,11 +26,12 @@ interface SidebarProps {
 
 export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
   const { user, logout } = useAuth();
-  const { currentPath, loadFiles } = useApp();
+  const { currentPath, loadFiles, setCurrentTenantId } = useApp();
   const { sidebarCollapsed, setSidebarCollapsed } = useUI();
   const { openModal } = useModal();
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'super_admin' || user?.role === 'tenant_admin';
+  const isSuperAdmin = user?.role === 'super_admin';
 
   const handleNavigation = (path: string) => {
     loadFiles(path);
@@ -55,6 +58,20 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
     { icon: Book, label: 'API Docs', href: '/api-docs', external: true },
     { icon: Info, label: 'About', onClick: () => handleOpenModal('about') },
   ];
+
+  const handleListTenants = () => {
+    // Navigate to root to show all tenant folders
+    setCurrentTenantId(null);
+    loadFiles('');
+    onMobileClose?.();
+  };
+
+  const tenantItems = isSuperAdmin
+    ? [
+        { icon: List, label: 'List Tenants', onClick: handleListTenants },
+        { icon: Plus, label: 'Create Tenant', onClick: () => openModal('tenantCreate') },
+      ]
+    : [];
 
   const settingsItems = [
     { icon: Key, label: 'API Token', onClick: () => handleOpenModal('user') },
@@ -134,6 +151,31 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
             </button>
           ))}
         </div>
+
+        {/* Tenants (Super Admin) */}
+        {tenantItems.length > 0 && (
+          <div className="px-3 mb-6">
+            {!sidebarCollapsed && (
+              <div className="text-[10px] uppercase tracking-wider text-sidebar-text/70 mb-2 px-2">
+                Tenants
+              </div>
+            )}
+            {tenantItems.map((item) => (
+              <button
+                key={item.label}
+                onClick={item.onClick}
+                className={cn(
+                  'w-full flex items-center gap-3 px-2 py-2 text-sm transition-colors mb-1',
+                  'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse',
+                  sidebarCollapsed && 'justify-center'
+                )}
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                {!sidebarCollapsed && <span>{item.label}</span>}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Utilities */}
         <div className="px-3 mb-6">

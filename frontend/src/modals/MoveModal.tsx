@@ -14,7 +14,7 @@ interface MoveData {
 export default function MoveModal() {
   const { activeModal, closeModal, modalData } = useModal();
   const { loadFiles, currentPath } = useFiles();
-  const { showToast } = useApp();
+  const { showToast, user, currentTenantId } = useApp();
 
   const [destinationPath, setDestinationPath] = useState('');
   const [isMoving, setIsMoving] = useState(false);
@@ -42,7 +42,13 @@ export default function MoveModal() {
   const loadDestinationFiles = async (path: string) => {
     setDestLoading(true);
     try {
-      const response = await api.getFiles(path, 1, 1000);
+      // Determine tenantId
+      let tenantId: string | null = currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      
+      const response = await api.getFiles(path, 1, 1000, false, tenantId);
       setDestFiles(response.items || []);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Failed to load destination', 'error');
@@ -69,7 +75,13 @@ export default function MoveModal() {
 
     setIsMoving(true);
     try {
-      await api.moveItem(data.path, destinationPath || '');
+      // Determine tenantId
+      let tenantId: string | null = currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      
+      await api.moveItem(data.path, destinationPath || '', tenantId);
       showToast(`Moved "${data.name}" successfully`, 'success');
       loadFiles(currentPath); // Refresh current view
       closeModal();

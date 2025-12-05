@@ -1,0 +1,16 @@
+{
+  "tenants": [
+    {
+      "tenantId": "hu6umygu9gi79n9kbufc59da",
+      "name": "test tenant",
+      "createdAt": "2025-12-05T15:56:35.706Z",
+      "createdBy": "admin"
+    },
+    {
+      "tenantId": "k173pocilk8gsy5q7h6c8w1r",
+      "name": "new tenant",
+      "createdAt": "2025-12-05T16:33:17.930Z",
+      "createdBy": "admin"
+    }
+  ]
+}

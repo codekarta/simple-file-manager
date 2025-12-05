@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Home, ChevronRight, Edit2 } from 'lucide-react';
-import { useFiles } from '../store';
+import { useFiles, useApp } from '../store';
 import { cn } from '../utils';
 
 export default function Breadcrumb() {
   const { currentPath, loadFiles } = useFiles();
+  const { user, currentTenantId, setCurrentTenantId } = useApp();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,11 +68,35 @@ export default function Breadcrumb() {
     );
   }
 
+  const handleBackToAllTenants = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentTenantId(null);
+    // Pass null directly to avoid race condition with state update
+    loadFiles('', 1, null);
+  };
+
   return (
     <div
       className="flex items-center gap-1 min-w-0 group cursor-text"
       onClick={handleStartEdit}
     >
+      {currentTenantId && user?.role === 'super_admin' && (
+        <>
+          <button
+            onClick={handleBackToAllTenants}
+            className="px-2 py-1 text-sm text-muted hover:text-foreground hover:bg-surface-tertiary transition-colors"
+            title="Back to Super Admin"
+          >
+            Super Admin
+          </button>
+          <ChevronRight className="w-4 h-4 text-subtle shrink-0" />
+          <span className="px-2 py-1 text-sm text-muted">Tenant:</span>
+          <span className="px-2 py-1 text-sm font-medium text-primary">
+            {currentTenantId.substring(0, 8)}...
+          </span>
+          <ChevronRight className="w-4 h-4 text-subtle shrink-0" />
+        </>
+      )}
       <button
         onClick={(e) => {
           e.stopPropagation();

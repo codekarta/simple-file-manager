@@ -11,20 +11,30 @@ import {
   Move,
   Link as LinkIcon,
 } from 'lucide-react';
-import { useFiles, useModal, useApp } from '../store';
+import { useFiles, useModal, useApp, useUI } from '../store';
 import type { FileItem } from '../types';
 import { FileGridIcon } from './FileIcon';
+import TenantItem from './TenantItem';
 import { formatFileSize, cn, isImageFile, isVideoFile } from '../utils';
 import * as api from '../api';
 
 export default function FileGrid() {
   const { optimisticFiles, selectedFiles, toggleFileSelection, loadFiles, currentPath } = useFiles();
-  const { showToast } = useApp();
+  const { showToast, user, currentTenantId, setCurrentTenantId } = useApp();
   const { openModal } = useModal();
+  const { viewMode } = useUI();
 
   const handleFileClick = (file: FileItem) => {
     if (file.isDirectory) {
-      loadFiles(file.path);
+      // If it's a tenant folder (marked with isTenant), switch to that tenant
+      if (file.isTenant && user?.role === 'super_admin') {
+        const tenantId = file.path; // file.path is the tenantId for tenant folders
+        setCurrentTenantId(tenantId);
+        // Pass tenantId directly to avoid race condition with state update
+        loadFiles('', 1, tenantId);
+      } else {
+        loadFiles(file.path);
+      }
     } else if (isImageFile(file.name) || isVideoFile(file.name)) {
       // Open gallery/slideshow for images and videos
       const mediaFiles = optimisticFiles.filter(
@@ -35,13 +45,22 @@ export default function FileGrid() {
         openModal('slideshow', { initialIndex: foundIndex });
       }
     } else {
-      // For other file types, open in new tab (existing behavior)
-      window.open(`/${file.path}`, '_blank');
+      // For other file types, open in new tab with tenant context
+      let tenantId: string | null = currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      const fileUrl = api.getFileUrl(file.path, tenantId);
+      window.open(fileUrl, '_blank');
     }
   };
 
   const handleDownload = (path: string) => {
-    window.location.href = api.getDownloadUrl(path);
+    let tenantId: string | null = currentTenantId;
+    if (!tenantId && user?.tenantId) {
+      tenantId = user.tenantId;
+    }
+    window.location.href = api.getDownloadUrl(path, tenantId);
   };
 
   const handleRename = (file: FileItem) => {
@@ -55,7 +74,11 @@ export default function FileGrid() {
   const handleToggleAccess = async (file: FileItem) => {
     try {
       const newLevel = file.accessLevel === 'private' ? 'public' : 'private';
-      await api.updateAccessLevel(file.path, newLevel);
+      let tenantId: string | null = currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      await api.updateAccessLevel(file.path, newLevel, tenantId);
       showToast(`Changed to ${newLevel}`, 'success');
       loadFiles(currentPath);
     } catch (error) {
@@ -65,7 +88,11 @@ export default function FileGrid() {
 
   const handleDuplicate = async (file: FileItem) => {
     try {
-      await api.duplicateItem(file.path);
+      let tenantId: string | null = currentTenantId;
+      if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      await api.duplicateItem(file.path, tenantId);
       showToast(`Duplicated "${file.name}"`, 'success');
       loadFiles(currentPath);
     } catch (error) {
@@ -89,23 +116,39 @@ export default function FileGrid() {
 
   return (
     <div className="file-grid p-4">
-      {optimisticFiles.map((file, index) => (
-        <FileGridItem
-          key={file.path}
-          file={file}
-          index={index}
-          isSelected={selectedFiles.has(file.path)}
-          onToggleSelect={() => toggleFileSelection(file.path)}
-          onClick={() => handleFileClick(file)}
-          onDownload={() => handleDownload(file.path)}
-          onDuplicate={() => handleDuplicate(file)}
-          onMove={() => handleMove(file)}
-          onCopyLink={() => handleCopyLink(file)}
-          onRename={() => handleRename(file)}
-          onDelete={() => handleDelete(file)}
-          onToggleAccess={() => handleToggleAccess(file)}
-        />
-      ))}
+      {optimisticFiles.map((file, index) => {
+        // Use TenantItem for tenant folders
+        if (file.isTenant && file.isDirectory) {
+          return (
+            <TenantItem
+              key={file.path}
+              file={file}
+              index={index}
+              isSelected={selectedFiles.has(file.path)}
+              onToggleSelect={() => toggleFileSelection(file.path)}
+              viewMode={viewMode}
+            />
+          );
+        }
+        // Regular file grid item
+        return (
+          <FileGridItem
+            key={file.path}
+            file={file}
+            index={index}
+            isSelected={selectedFiles.has(file.path)}
+            onToggleSelect={() => toggleFileSelection(file.path)}
+            onClick={() => handleFileClick(file)}
+            onDownload={() => handleDownload(file.path)}
+            onDuplicate={() => handleDuplicate(file)}
+            onMove={() => handleMove(file)}
+            onCopyLink={() => handleCopyLink(file)}
+            onRename={() => handleRename(file)}
+            onDelete={() => handleDelete(file)}
+            onToggleAccess={() => handleToggleAccess(file)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -292,6 +335,7 @@ function FileGridItem({
           name={file.name}
           isDirectory={file.isDirectory}
           thumbnailUrl={file.thumbnailUrl}
+          isTenant={file.isTenant}
         />
         <div className="mt-3 w-full text-center">
           <p

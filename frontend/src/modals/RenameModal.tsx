@@ -10,7 +10,7 @@ import * as api from '../api';
 export default function RenameModal() {
   const { currentPath, loadFiles } = useFiles();
   const { activeModal, modalData, closeModal } = useModal();
-  const { showToast } = useApp();
+  const { showToast, user, currentTenantId } = useApp();
 
   const isOpen = activeModal === 'rename';
   const data = modalData as RenameData | undefined;
@@ -30,7 +30,13 @@ export default function RenameModal() {
       }
 
       try {
-        await api.renameItem(data.path, newName.trim());
+        // Determine tenantId
+        let tenantId: string | null = currentTenantId;
+        if (!tenantId && user?.tenantId) {
+          tenantId = user.tenantId;
+        }
+        
+        await api.renameItem(data.path, newName.trim(), tenantId);
         showToast(`Renamed to "${newName}"`, 'success');
         loadFiles(currentPath);
         closeModal();

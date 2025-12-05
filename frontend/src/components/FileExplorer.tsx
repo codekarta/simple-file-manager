@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, CheckCircle, AlertCircle, File, Folder, Minimize2, Maximize2 } from 'lucide-react';
-import { useFiles, useUI, useStorage } from '../store';
+import { useFiles, useUI, useStorage, useApp } from '../store';
 import FileTable from './FileTable';
 import FileGrid from './FileGrid';
 import Pagination from './Pagination';
@@ -26,6 +26,7 @@ export default function FileExplorer() {
   const { optimisticFiles, isLoading, currentPath, loadFiles } = useFiles();
   const { viewMode, searchQuery, showToast } = useUI();
   const { refreshStorageInfo } = useStorage();
+  const { user, currentTenantId } = useApp();
 
   // Drag and drop state
   const [isDragging, setIsDragging] = useState(false);
@@ -158,6 +159,12 @@ export default function FileExplorer() {
       );
 
       try {
+        // Determine tenantId for upload
+        let tenantId: string | null = currentTenantId;
+        if (!tenantId && user?.tenantId) {
+          tenantId = user.tenantId;
+        }
+        
         await api.uploadSingleFile(
           item.file,
           currentPath,
@@ -167,7 +174,8 @@ export default function FileExplorer() {
             setUploads((prev) =>
               prev.map((u) => (u.id === item.id ? { ...u, progress } : u))
             );
-          }
+          },
+          tenantId
         );
 
         // Update status to completed

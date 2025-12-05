@@ -274,6 +274,26 @@ app.use('/thumb', async (req, res, next) => {
   }
 });
 
+// Helper function to extract tenantId from request
+function extractTenantId(req) {
+  // From URL path: /{tenantId}/...
+  const pathMatch = req.path.match(/^\/([^\/]+)/);
+  if (pathMatch && pathMatch[1] !== 'api' && pathMatch[1] !== 'admin' && pathMatch[1] !== 'thumb' && pathMatch[1] !== 'assets') {
+    // Validate it looks like a CUID (starts with 'c' and is ~25 chars)
+    const potentialTenantId = pathMatch[1];
+    if (potentialTenantId.length > 20 && potentialTenantId.match(/^[a-z0-9]+$/)) {
+      return potentialTenantId;
+    }
+  }
+  
+  // From query parameter
+  if (req.query.tenantId) {
+    return req.query.tenantId;
+  }
+  
+  return null;
+}
+
 // Enhanced authentication middleware supporting both session and API tokens
 const requireAuth = async (req, res, next) => {
   try {
@@ -286,6 +306,8 @@ const requireAuth = async (req, res, next) => {
       if (user) {
         req.user = user;
         req.authMethod = 'api_token';
+        // Extract tenantId from request if available
+        req.tenantId = extractTenantId(req) || user.tenantId;
         return next();
       }
     }
@@ -298,15 +320,21 @@ const requireAuth = async (req, res, next) => {
       if (user) {
         req.user = user;
         req.authMethod = 'api_token';
+        req.tenantId = extractTenantId(req) || user.tenantId;
         return next();
       }
     }
     
     // Check session authentication
     if (req.session && req.session.authenticated) {
-      req.user = await credentialsManager.getUserByUsername(req.session.username);
-      req.authMethod = 'session';
-      return next();
+      const user = await credentialsManager.getUserByUsername(req.session.username);
+      if (user) {
+        req.user = user;
+        req.authMethod = 'session';
+        // Extract tenantId from request, or use user's tenant, or from session
+        req.tenantId = extractTenantId(req) || req.session.tenantId || user.tenantId;
+        return next();
+      }
     }
     
     // No valid authentication found
@@ -320,9 +348,33 @@ const requireAuth = async (req, res, next) => {
   }
 };
 
-// Admin-only middleware
+// Super admin only middleware
+const requireSuperAdmin = async (req, res, next) => {
+  if (req.user && req.user.role === 'super_admin') {
+    next();
+  } else {
+    res.status(403).json({ 
+      error: 'Super admin access required',
+      message: 'This operation requires super administrator privileges'
+    });
+  }
+};
+
+// Tenant admin or super admin middleware
+const requireTenantAdmin = async (req, res, next) => {
+  if (req.user && (req.user.role === 'super_admin' || req.user.role === 'tenant_admin')) {
+    next();
+  } else {
+    res.status(403).json({ 
+      error: 'Admin access required',
+      message: 'This operation requires administrator privileges'
+    });
+  }
+};
+
+// Admin-only middleware (backward compatibility - checks for both admin and super_admin)
 const requireAdmin = async (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
+  if (req.user && (req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.role === 'tenant_admin')) {
     next();
   } else {
     res.status(403).json({ 
@@ -344,6 +396,32 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
   index: false // Don't serve index.html for / - we handle that separately
 }));
 
+// Helper function to resolve tenant-aware file path
+function resolveTenantFilePath(tenantId, filePath, baseUploadsPath) {
+  if (tenantId) {
+    // Tenant-specific path: uploads/{tenantId}/...
+    return path.join(baseUploadsPath, tenantId, filePath);
+  } else {
+    // Legacy path for super admin: uploads/...
+    return path.join(baseUploadsPath, filePath);
+  }
+}
+
+// Helper function to verify tenant access
+async function verifyTenantAccess(user, tenantId) {
+  // Super admin can access all tenants
+  if (user.role === 'super_admin') {
+    return true;
+  }
+  
+  // Tenant users can only access their own tenant
+  if (user.tenantId === tenantId) {
+    return true;
+  }
+  
+  return false;
+}
+
 // Auth-aware static file middleware for public/private access control
 // Public files: accessible to everyone
 // Private files: require session or API token authentication
@@ -353,13 +431,32 @@ app.use(async (req, res, next) => {
     return next();
   }
   
+  // Extract tenantId from URL path: /{tenantId}/...
+  const pathParts = req.path.split('/').filter(p => p);
+  let tenantId = null;
+  let filePath = '';
+  
+  if (pathParts.length > 0) {
+    const firstPart = pathParts[0];
+    // Check if first part looks like a CUID (tenantId)
+    if (firstPart.length > 20 && firstPart.match(/^[a-z0-9]+$/)) {
+      tenantId = firstPart;
+      filePath = pathParts.slice(1).join('/');
+    } else {
+      // Legacy path without tenantId (for super admin only)
+      filePath = pathParts.join('/');
+    }
+  }
+  
   // Decode URL-encoded path
-  const decodedPath = decodeURIComponent(req.path);
-  const relativePath = decodedPath.startsWith('/') ? decodedPath.slice(1) : decodedPath;
-  const fullPath = path.join(uploadsPath, relativePath);
+  const decodedPath = decodeURIComponent(filePath);
+  
+  // Resolve full path based on tenant
+  const fullPath = resolveTenantFilePath(tenantId, decodedPath, uploadsPath);
   
   // Security check: prevent directory traversal
-  if (!fullPath.startsWith(uploadsPath)) {
+  const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
+  if (!fullPath.startsWith(expectedBase)) {
     return res.status(403).json({ error: 'Access denied' });
   }
   
@@ -368,11 +465,38 @@ app.use(async (req, res, next) => {
     return next(); // Let other handlers deal with 404
   }
   
-  // Get effective access level (checks file and parent hierarchy)
-  let accessLevel = 'public';
-  if (fileCache.isReady()) {
+  // If tenantId is specified, verify access
+  if (tenantId) {
+    // Try to get user from session or API token
+    let user = null;
     try {
-      accessLevel = fileCache.getAccessLevel(relativePath);
+      if (req.session && req.session.authenticated) {
+        user = await credentialsManager.getUserByUsername(req.session.username);
+      } else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+        const apiKey = req.headers.authorization.substring(7);
+        user = await credentialsManager.getUserByApiKey(apiKey);
+      } else if (req.query.apiKey || req.query.api_key) {
+        const apiKey = req.query.apiKey || req.query.api_key;
+        user = await credentialsManager.getUserByApiKey(apiKey);
+      }
+      
+      if (user && !(await verifyTenantAccess(user, tenantId))) {
+        return res.status(403).json({ error: 'Access denied to this tenant' });
+      }
+    } catch (error) {
+      // If auth check fails, allow public files to be served
+      // Private files will be blocked by access level check below
+    }
+  }
+  
+  // Get effective access level (checks file and parent hierarchy)
+  // For tenant files, we'll default to public for now
+  // Cache would need to be tenant-aware in the future to properly check tenant file access levels
+  let accessLevel = 'public';
+  if (fileCache.isReady() && !tenantId) {
+    // Only check cache for non-tenant files (legacy support)
+    try {
+      accessLevel = fileCache.getAccessLevel(decodedPath) || 'public';
     } catch (e) {
       // If cache fails, default to public for backwards compatibility
       console.warn('Cache access level check failed:', e.message);
@@ -480,6 +604,7 @@ app.post('/api/login', async (req, res) => {
     req.session.authenticated = true;
     req.session.username = username;
     req.session.role = user.role;
+    req.session.tenantId = user.tenantId || null;
     
     req.session.save((err) => {
       if (err) {
@@ -491,7 +616,8 @@ app.post('/api/login', async (req, res) => {
         message: 'Login successful',
         user: {
           username: user.username,
-          role: user.role
+          role: user.role,
+          tenantId: user.tenantId || null
         }
       });
     });
@@ -517,18 +643,110 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/auth/status', async (req, res) => {
   try {
     if (req.session && req.session.authenticated) {
-      const userInfo = await credentialsManager.getUserInfo(req.session.username);
-      res.json({ 
-        authenticated: true,
-        user: userInfo
-      });
-    } else {
-      res.json({ 
-        authenticated: false 
-      });
+      const user = await credentialsManager.getUserByUsername(req.session.username);
+      if (user) {
+        return res.json({
+          authenticated: true,
+          user: {
+            username: user.username,
+            role: user.role,
+            tenantId: user.tenantId || null
+          }
+        });
+      }
     }
+    
+    res.json({ authenticated: false });
+  } catch (error) {
+    console.error('Auth status error:', error);
+    res.json({ authenticated: false });
+  }
+});
+
+// ===== TENANT MANAGEMENT API ROUTES (Super Admin Only) =====
+
+// Create tenant
+app.post('/api/super-admin/tenants', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { name } = req.body;
+    
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Tenant name is required' });
+    }
+    
+    const tenant = await credentialsManager.createTenant(name.trim(), req.user.username);
+    
+    res.json({
+      success: true,
+      message: 'Tenant created successfully',
+      tenant
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// List all tenants
+app.get('/api/super-admin/tenants', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const tenants = await credentialsManager.listTenants();
+    res.json({ success: true, tenants });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Get tenant by ID
+app.get('/api/super-admin/tenants/:tenantId', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const tenant = await credentialsManager.getTenantById(tenantId);
+    
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+    
+    res.json({ success: true, tenant });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update tenant
+app.put('/api/super-admin/tenants/:tenantId', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const { name } = req.body;
+    
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Tenant name is required' });
+    }
+    
+    const tenant = await credentialsManager.updateTenant(tenantId, { name: name.trim() });
+    
+    res.json({
+      success: true,
+      message: 'Tenant updated successfully',
+      tenant
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Delete tenant
+app.delete('/api/super-admin/tenants/:tenantId', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    
+    await credentialsManager.deleteTenant(tenantId);
+    
+    res.json({
+      success: true,
+      message: 'Tenant deleted successfully'
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 });
 
@@ -626,19 +844,147 @@ app.delete('/api/user/delete-token', requireAuth, async (req, res) => {
 
 // ===== ADMIN USER MANAGEMENT API ROUTES =====
 
-// List all users (admin only)
+// List all users (tenant-aware)
 app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const users = await credentialsManager.listUsers();
+    // Super admin can list all users or filter by tenantId
+    // Tenant admin can only list users in their tenant
+    let tenantId = req.query.tenantId;
+    
+    if (req.user.role === 'tenant_admin') {
+      tenantId = req.user.tenantId;
+    } else if (req.user.role === 'super_admin' && !tenantId) {
+      // Super admin without tenantId gets all users
+      tenantId = null;
+    }
+    
+    const users = await credentialsManager.listUsers(tenantId);
     res.json({ success: true, users });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Create user (admin only)
+// List users in a specific tenant (super admin only)
+app.get('/api/super-admin/tenants/:tenantId/users', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const users = await credentialsManager.getUsersByTenant(tenantId);
+    res.json({ success: true, users });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create user in tenant (super admin only)
+app.post('/api/super-admin/tenants/:tenantId/users', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const { username, role, password } = req.body;
+    
+    if (!username) {
+      return res.status(400).json({ 
+        error: 'Username is required' 
+      });
+    }
+    
+    // Allow simple usernames or valid email addresses
+    const simpleUsernamePattern = /^[a-zA-Z0-9_-]+$/;
+    const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    
+    if (!simpleUsernamePattern.test(username) && !emailPattern.test(username)) {
+      return res.status(400).json({ 
+        error: 'Username must be alphanumeric (with hyphens/underscores) or a valid email address' 
+      });
+    }
+    
+    // Validate tenant exists
+    const tenant = await credentialsManager.getTenantById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+    
+    const newUser = await credentialsManager.createUser(
+      username, 
+      role || 'user',
+      tenantId,
+      password
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'User created successfully',
+      user: newUser
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Create user (tenant admin creates in own tenant, super admin can specify tenant)
 app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   try {
+    const { username, role, password, tenantId } = req.body;
+    
+    if (!username) {
+      return res.status(400).json({ 
+        error: 'Username is required' 
+      });
+    }
+    
+    // Allow simple usernames or valid email addresses
+    const simpleUsernamePattern = /^[a-zA-Z0-9_-]+$/;
+    const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    
+    if (!simpleUsernamePattern.test(username) && !emailPattern.test(username)) {
+      return res.status(400).json({ 
+        error: 'Username must be alphanumeric (with hyphens/underscores) or a valid email address' 
+      });
+    }
+    
+    // Determine tenantId based on user role
+    let targetTenantId = tenantId;
+    if (req.user.role === 'tenant_admin') {
+      // Tenant admin can only create users in their own tenant
+      targetTenantId = req.user.tenantId;
+    } else if (req.user.role === 'super_admin') {
+      // Super admin can create users in any tenant or as super admin (no tenantId)
+      // If tenantId not provided, create as super admin
+      targetTenantId = tenantId || null;
+    }
+    
+    // If tenantId provided, validate tenant exists
+    if (targetTenantId) {
+      const tenant = await credentialsManager.getTenantById(targetTenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: 'Tenant not found' });
+      }
+    }
+    
+    const newUser = await credentialsManager.createUser(
+      username, 
+      role || 'user',
+      targetTenantId,
+      password
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'User created successfully',
+      user: newUser
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Create user in own tenant (tenant admin only)
+app.post('/api/tenant-admin/users', requireAuth, requireTenantAdmin, async (req, res) => {
+  try {
+    if (req.user.role !== 'tenant_admin') {
+      return res.status(403).json({ error: 'Tenant admin access required' });
+    }
+    
     const { username, role, password } = req.body;
     
     if (!username) {
@@ -660,6 +1006,7 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
     const newUser = await credentialsManager.createUser(
       username, 
       role || 'user',
+      req.user.tenantId,
       password
     );
     
@@ -724,22 +1071,67 @@ app.delete('/api/admin/users/:username', requireAuth, requireAdmin, async (req, 
 
 // ===== FILE MANAGEMENT API ROUTES =====
 
-// List files and directories with pagination
+// List files and directories with pagination (tenant-aware)
 app.get('/api/files', requireAuth, async (req, res) => {
   try {
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
+    // For super admin viewing root, show all tenants
     const subPath = req.query.path || '';
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
     const showHidden = req.query.showHidden === 'true';
-    const fullPath = path.join(uploadsPath, subPath);
+    
+    // If super admin and no tenantId specified and path is empty, list tenants
+    if (req.user.role === 'super_admin' && !tenantId && subPath === '') {
+      const tenants = await credentialsManager.listTenants();
+      const tenantItems = tenants.map(tenant => ({
+        name: tenant.name,
+        path: tenant.tenantId,
+        isDirectory: true,
+        size: 0,
+        modified: tenant.createdAt,
+        created: tenant.createdAt,
+        accessLevel: 'public',
+        isTenant: true // Mark as tenant folder
+      }));
+      
+      return res.json({
+        currentPath: '',
+        items: tenantItems,
+        pagination: {
+          page: 1,
+          limit,
+          total: tenantItems.length,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false
+        }
+      });
+    }
+    
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+    
+    const fullPath = resolveTenantFilePath(tenantId, subPath, uploadsPath);
+    const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
     
     // Security check: prevent directory traversal
-    if (!fullPath.startsWith(uploadsPath)) {
+    if (!fullPath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
     // Try cache first, fallback to filesystem
-    if (fileCache.isReady()) {
+    // Skip cache for tenant-specific requests as cache may not be tenant-aware
+    if (fileCache.isReady() && !tenantId) {
       try {
         const { items, total } = fileCache.getFiles(subPath, page, limit, showHidden);
         // Add thumbnailUrl for image files
@@ -773,7 +1165,9 @@ app.get('/api/files', requireAuth, async (req, res) => {
         .map(async (item) => {
           const itemPath = path.join(fullPath, item.name);
           const stats = await fs.stat(itemPath);
-          const relativePath = path.relative(uploadsPath, itemPath);
+          // Calculate relative path from tenant base or uploads base
+          const basePath = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
+          const relativePath = path.relative(basePath, itemPath);
           
           // Get access level from cache if available
           let accessLevel = 'public';
@@ -831,9 +1225,22 @@ app.get('/api/files', requireAuth, async (req, res) => {
   }
 });
 
-// Upload file(s) or folders
+// Upload file(s) or folders (tenant-aware)
 app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res) => {
   try {
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+    
     const basePath = req.body.basePath || req.body.path || '';
     const relativePaths = req.body.relativePaths;
     const accessLevel = req.body.mediaAccessLevel || 'public'; // Default to public
@@ -849,6 +1256,7 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
     
     if (isFolderUpload) {
       console.log('📁 Folder upload detected');
+      console.log(`Tenant: ${tenantId || '(none)'}`);
       console.log(`Base path: ${basePath || '(root)'}`);
       console.log(`Files: ${req.files.length}`);
       console.log(`Access level: ${accessLevel}`);
@@ -856,6 +1264,7 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
     
     const movedFiles = [];
     const createdFolders = new Set();
+    const tenantBasePath = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
     
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
@@ -864,12 +1273,12 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       
       if (relativePaths && Array.isArray(relativePaths) && relativePaths[i]) {
         relativePath = relativePaths[i];
-        targetPath = path.join(uploadsPath, basePath, relativePath);
+        targetPath = path.join(tenantBasePath, basePath, relativePath);
       } else if (relativePaths && !Array.isArray(relativePaths)) {
         relativePath = relativePaths;
-        targetPath = path.join(uploadsPath, basePath, relativePath);
+        targetPath = path.join(tenantBasePath, basePath, relativePath);
       } else {
-        targetPath = path.join(uploadsPath, basePath, file.originalname);
+        targetPath = path.join(tenantBasePath, basePath, file.originalname);
       }
       
       const targetDir = path.dirname(targetPath);
@@ -884,7 +1293,7 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       
       await fs.rename(file.path, targetPath);
       
-      const fileRelativePath = path.relative(uploadsPath, targetPath);
+      const fileRelativePath = path.relative(tenantBasePath, targetPath);
       movedFiles.push({
         name: file.originalname,
         size: file.size,
@@ -917,7 +1326,7 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
     // Update cache for created folders with access level
     for (const folderPath of createdFolders) {
       try {
-        const fullFolderPath = path.join(uploadsPath, folderPath);
+        const fullFolderPath = path.join(tenantBasePath, folderPath);
         const stats = await fs.stat(fullFolderPath);
         fileCache.addFile(folderPath, {
           size: 0,
@@ -972,12 +1381,26 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
   }
 });
 
-// Create folder
+// Create folder (tenant-aware)
 app.post('/api/folder', requireAuth, async (req, res) => {
   try {
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+    
     const { path: subPath, name, mediaAccessLevel } = req.body;
     const accessLevel = mediaAccessLevel || 'public'; // Default to public
-    const folderPath = path.join(uploadsPath, subPath || '', name);
+    const tenantBasePath = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
+    const folderPath = path.join(tenantBasePath, subPath || '', name);
     
     // Validate access level
     if (!['public', 'private'].includes(accessLevel)) {
@@ -986,7 +1409,7 @@ app.post('/api/folder', requireAuth, async (req, res) => {
       });
     }
     
-    if (!folderPath.startsWith(uploadsPath)) {
+    if (!folderPath.startsWith(tenantBasePath)) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -994,7 +1417,7 @@ app.post('/api/folder', requireAuth, async (req, res) => {
     
     // Update cache with access level
     try {
-      const relativePath = path.relative(uploadsPath, folderPath);
+      const relativePath = path.relative(tenantBasePath, folderPath);
       const stats = await fs.stat(folderPath);
       fileCache.addFile(relativePath, {
         size: 0,
@@ -1016,9 +1439,22 @@ app.post('/api/folder', requireAuth, async (req, res) => {
   }
 });
 
-// Create new file
+// Create new file (tenant-aware)
 app.post('/api/file', requireAuth, async (req, res) => {
   try {
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+    
     const { path: subPath, name, content, mediaAccessLevel } = req.body;
     const accessLevel = mediaAccessLevel || 'public'; // Default to public
     
@@ -1035,9 +1471,10 @@ app.post('/api/file', requireAuth, async (req, res) => {
     
     // Sanitize filename - remove path separators and dangerous characters
     const sanitizedName = name.replace(/[\/\\:*?"<>|]/g, '_');
-    const filePath = path.join(uploadsPath, subPath || '', sanitizedName);
+    const tenantBasePath = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
+    const filePath = path.join(tenantBasePath, subPath || '', sanitizedName);
     
-    if (!filePath.startsWith(uploadsPath)) {
+    if (!filePath.startsWith(tenantBasePath)) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -1058,7 +1495,7 @@ app.post('/api/file', requireAuth, async (req, res) => {
     
     // Update cache with access level
     try {
-      const relativePath = path.relative(uploadsPath, filePath);
+      const relativePath = path.relative(tenantBasePath, filePath);
       const stats = await fs.stat(filePath);
       fileCache.addFile(relativePath, {
         size: stats.size,
@@ -1081,13 +1518,28 @@ app.post('/api/file', requireAuth, async (req, res) => {
   }
 });
 
-// Delete file or folder
+// Delete file or folder (tenant-aware)
 app.delete('/api/delete', requireAuth, async (req, res) => {
   try {
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
     const { path: itemPath } = req.body;
-    const fullPath = path.join(uploadsPath, itemPath);
+    
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+    
+    const fullPath = resolveTenantFilePath(tenantId, itemPath, uploadsPath);
+    const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
 
-    if (!fullPath.startsWith(uploadsPath) || fullPath === uploadsPath) {
+    if (!fullPath.startsWith(expectedBase) || fullPath === expectedBase) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -1124,14 +1576,29 @@ app.delete('/api/delete', requireAuth, async (req, res) => {
   }
 });
 
-// Rename file or folder
+// Rename file or folder (tenant-aware)
 app.post('/api/rename', requireAuth, async (req, res) => {
   try {
-    const { path: itemPath, newName } = req.body;
-    const oldPath = path.join(uploadsPath, itemPath);
-    const newPath = path.join(path.dirname(oldPath), newName);
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
     
-    if (!oldPath.startsWith(uploadsPath) || !newPath.startsWith(uploadsPath)) {
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
+    const { path: itemPath, newName } = req.body;
+    
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+    
+    const oldPath = resolveTenantFilePath(tenantId, itemPath, uploadsPath);
+    const newPath = path.join(path.dirname(oldPath), newName);
+    const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
+    
+    if (!oldPath.startsWith(expectedBase) || !newPath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -1141,7 +1608,7 @@ app.post('/api/rename', requireAuth, async (req, res) => {
     
     await fs.rename(oldPath, newPath);
     
-    const newRelativePath = path.relative(uploadsPath, newPath);
+    const newRelativePath = path.relative(expectedBase, newPath);
     
     // Update cache (renameFile handles recursive path updates for directories)
     try {
@@ -1175,17 +1642,31 @@ app.post('/api/rename', requireAuth, async (req, res) => {
   }
 });
 
-// Duplicate file or folder
+// Duplicate file or folder (tenant-aware)
 app.post('/api/duplicate', requireAuth, async (req, res) => {
   try {
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
     const { path: itemPath } = req.body;
     if (!itemPath) {
       return res.status(400).json({ error: 'Path is required' });
     }
 
-    const sourcePath = path.join(uploadsPath, itemPath);
-    
-    if (!sourcePath.startsWith(uploadsPath)) {
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+
+    const sourcePath = resolveTenantFilePath(tenantId, itemPath, uploadsPath);
+    const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
+
+    if (!sourcePath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -1225,14 +1706,14 @@ app.post('/api/duplicate', requireAuth, async (req, res) => {
       await fs.copyFile(sourcePath, newPath);
     }
 
-    const newRelativePath = path.relative(uploadsPath, newPath);
+    const newRelativePath = path.relative(expectedBase, newPath);
 
     // Update cache
     try {
       if (isDirectory) {
         // For directories, we need to rebuild cache for that path
         // Or add all files recursively - for now, trigger a sync
-        fileCache.syncDirectory(path.relative(uploadsPath, dirName));
+        fileCache.syncDirectory(path.relative(expectedBase, dirName));
       } else {
         // Add single file to cache
         const newStats = await fs.stat(newPath);
@@ -1246,7 +1727,7 @@ app.post('/api/duplicate', requireAuth, async (req, res) => {
     }
 
     // Copy thumbnail if it's an image file
-    if (!isDirectory && thumbnailGenerator.isImageFile(itemPath)) {
+    if (!isDirectory && thumbnailGenerator.isImageFile(newRelativePath)) {
       try {
         const oldThumbPath = thumbnailGenerator.getThumbnailFullPath(itemPath);
         const newThumbPath = thumbnailGenerator.getThumbnailFullPath(newRelativePath);
@@ -1275,21 +1756,35 @@ app.post('/api/duplicate', requireAuth, async (req, res) => {
   }
 });
 
-// Move file or folder
+// Move file or folder (tenant-aware)
 app.post('/api/move', requireAuth, async (req, res) => {
   try {
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
     const { path: itemPath, destination } = req.body;
     if (!itemPath || !destination) {
       return res.status(400).json({ error: 'Path and destination are required' });
     }
 
-    const sourcePath = path.join(uploadsPath, itemPath);
-    const destDir = path.join(uploadsPath, destination);
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+
+    const sourcePath = resolveTenantFilePath(tenantId, itemPath, uploadsPath);
+    const destDir = resolveTenantFilePath(tenantId, destination, uploadsPath);
     const fileName = path.basename(sourcePath);
     const targetPath = path.join(destDir, fileName);
+    const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
 
     // Security checks
-    if (!sourcePath.startsWith(uploadsPath) || !targetPath.startsWith(uploadsPath)) {
+    if (!sourcePath.startsWith(expectedBase) || !targetPath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -1317,7 +1812,7 @@ app.post('/api/move', requireAuth, async (req, res) => {
     // Move the file/folder
     await fs.rename(sourcePath, targetPath);
 
-    const newRelativePath = path.relative(uploadsPath, targetPath);
+    const newRelativePath = path.relative(expectedBase, targetPath);
 
     // Update cache
     try {
@@ -1359,17 +1854,31 @@ app.post('/api/move', requireAuth, async (req, res) => {
   }
 });
 
-// Download file or folder (folders are automatically zipped)
+// Download file or folder (folders are automatically zipped) (tenant-aware)
 app.get('/api/download', requireAuth, async (req, res) => {
   try {
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
     const itemPath = req.query.path;
     if (!itemPath) {
       return res.status(400).json({ error: 'Path is required' });
     }
     
-    const fullPath = path.join(uploadsPath, itemPath);
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
     
-    if (!fullPath.startsWith(uploadsPath)) {
+    const fullPath = resolveTenantFilePath(tenantId, itemPath, uploadsPath);
+    const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
+    
+    if (!fullPath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -1417,9 +1926,17 @@ app.get('/api/download', requireAuth, async (req, res) => {
   }
 });
 
-// Update access level of a file or folder
+// Update access level of a file or folder (tenant-aware)
 app.post('/api/access-level', requireAuth, async (req, res) => {
   try {
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
     const { path: itemPath, accessLevel } = req.body;
     
     if (!itemPath) {
@@ -1432,10 +1949,16 @@ app.post('/api/access-level', requireAuth, async (req, res) => {
       });
     }
     
-    const fullPath = path.join(uploadsPath, itemPath);
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+    
+    const fullPath = resolveTenantFilePath(tenantId, itemPath, uploadsPath);
+    const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
     
     // Security check
-    if (!fullPath.startsWith(uploadsPath)) {
+    if (!fullPath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -1537,7 +2060,7 @@ app.get('/api/search', requireAuth, async (req, res) => {
         if (!showHidden && item.name.startsWith('.')) continue;
         
         const fullPath = path.join(dirPath, item.name);
-        const relativePath = path.relative(uploadsPath, fullPath);
+        const relativePath = path.relative(searchBasePath, fullPath);
         
         // Check if filename matches
         let matches = false;
@@ -1581,7 +2104,7 @@ app.get('/api/search', requireAuth, async (req, res) => {
       }
     }
     
-    await searchDir(uploadsPath);
+    await searchDir(searchBasePath);
     
     // Sort results: directories first, then by name
     results.sort((a, b) => {
@@ -1611,33 +2134,40 @@ app.get('/api/search', requireAuth, async (req, res) => {
   }
 });
 
-// Get storage info (uses cache for fast aggregation)
+// Get storage info (uses cache for fast aggregation) (tenant-aware)
 app.get('/api/storage', requireAuth, async (req, res) => {
   try {
-    // Try cache first for instant results
-    if (fileCache.isReady()) {
-      try {
-        const storageInfo = fileCache.getStorageInfo();
-        return res.json(storageInfo);
-      } catch (cacheError) {
-        console.error('Cache storage info error, falling back to filesystem:', cacheError.message);
-      }
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
     }
     
-    // Filesystem fallback
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+    
+    const tenantBasePath = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
+    
+    // Filesystem calculation (cache doesn't support tenant filtering yet)
     let totalSize = 0;
     let fileCount = 0;
     let folderCount = 0;
-    
+
     async function calculateSize(dirPath) {
-      const items = await fs.readdir(dirPath, { withFileTypes: true });
+      if (!existsSync(dirPath)) return;
       
+      const items = await fs.readdir(dirPath, { withFileTypes: true });
+
       for (const item of items) {
         // Skip symlinks
         if (item.isSymbolicLink()) continue;
-        
+
         const fullPath = path.join(dirPath, item.name);
-        
+
         if (item.isDirectory()) {
           folderCount++;
           await calculateSize(fullPath);
@@ -1649,7 +2179,7 @@ app.get('/api/storage', requireAuth, async (req, res) => {
       }
     }
     
-    await calculateSize(uploadsPath);
+    await calculateSize(tenantBasePath);
     
     res.json({
       totalSize,

@@ -1,7 +1,8 @@
 // User types
 export interface User {
   username: string;
-  role: 'admin' | 'user';
+  role: 'super_admin' | 'tenant_admin' | 'user';
+  tenantId?: string | null;
   hasApiKey?: boolean;
   apiKey?: string;
   createdAt?: string;
@@ -22,6 +23,7 @@ export interface FileItem {
   created?: string;
   accessLevel: 'public' | 'private';
   thumbnailUrl: string | null;
+  isTenant?: boolean; // Mark tenant folders
 }
 
 export interface Pagination {
@@ -82,7 +84,8 @@ export interface UserListResponse {
   success: boolean;
   users: Array<{
     username: string;
-    role: 'admin' | 'user';
+    role: 'super_admin' | 'tenant_admin' | 'user';
+    tenantId?: string | null;
     hasApiKey: boolean;
     createdAt: string;
   }>;
@@ -94,7 +97,8 @@ export interface CreateUserResponse {
   user: {
     username: string;
     password: string;
-    role: 'admin' | 'user';
+    role: 'super_admin' | 'tenant_admin' | 'user';
+    tenantId?: string | null;
   };
 }
 
@@ -134,6 +138,9 @@ export interface AppState {
   isAuthenticated: boolean;
   user: User | null;
   
+  // Tenant
+  currentTenantId: string | null;
+  
   // Files
   currentPath: string;
   files: FileItem[];
@@ -167,6 +174,10 @@ export type ModalType =
   | 'about'
   | 'slideshow'
   | 'move'
+  | 'tenant'
+  | 'tenantList'
+  | 'tenantCreate'
+  | 'tenantUser'
   | null;
 
 export interface ModalState {

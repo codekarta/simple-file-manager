@@ -17,10 +17,12 @@ interface UserItem {
   createdAt: string;
 }
 
-export default function AdminModal() {
+export default function TenantUserModal() {
   const { user: currentUser } = useAuth();
-  const { activeModal, closeModal } = useModal();
+  const { activeModal, closeModal, modalData } = useModal();
   const { showToast } = useApp();
+
+  const tenantId = (modalData as { tenantId?: string })?.tenantId;
 
   const [users, setUsers] = useState<UserItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,25 +36,21 @@ export default function AdminModal() {
   const [resetTarget, setResetTarget] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
 
-  const isOpen = activeModal === 'admin';
+  const isOpen = activeModal === 'tenantUser';
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && tenantId) {
       loadUsers();
       setGeneratedPassword(generatePassword());
     }
-  }, [isOpen]);
+  }, [isOpen, tenantId]);
 
   const loadUsers = async () => {
+    if (!tenantId) return;
     setIsLoading(true);
     try {
-      // Only load super admin users (users without tenantId)
-      const userList = await api.listUsers();
-      // Filter to only show super admin users (no tenantId) or super_admin role
-      const superAdminUsers = userList.filter(
-        (u) => !u.tenantId && (u.role === 'super_admin' || currentUser?.role === 'super_admin')
-      );
-      setUsers(superAdminUsers);
+      const userList = await api.listUsers(tenantId);
+      setUsers(userList);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Failed to load users', 'error');
     } finally {
@@ -66,9 +64,10 @@ export default function AdminModal() {
 
   const [, createUserAction, isCreating] = useActionState(
     async (_prevState: unknown, formData: FormData) => {
+      if (!tenantId) return;
       const username = formData.get('username') as string;
       const password = formData.get('password') as string;
-      const role = formData.get('role') as 'super_admin' | 'tenant_admin' | 'user';
+      const role = formData.get('role') as 'tenant_admin' | 'user';
 
       if (!username?.trim()) {
         showToast('Username is required', 'error');
@@ -81,20 +80,16 @@ export default function AdminModal() {
       }
 
       try {
-        // AdminModal is for super admin users only - don't assign tenantId
-        // Super admin can create other super admin users or tenant admins without tenantId
-        
-        const newUser = await api.createUser(
+        const newUser = await api.createTenantUser(
+          tenantId,
           username.trim(),
           role || 'user',
-          password,
-          undefined // No tenantId for super admin users
+          password
         );
         showToast(`User "${newUser.username}" created`, 'success');
         alert(`User created!\n\nUsername: ${newUser.username}\nPassword: ${newUser.password}\nRole: ${newUser.role}\n\nPlease save this password securely.`);
         loadUsers();
         setGeneratedPassword(generatePassword());
-        // Clear form - we need to reset the form somehow
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Failed to create user', 'error');
       }
@@ -137,12 +132,16 @@ export default function AdminModal() {
     }
   };
 
+  if (!tenantId) {
+    return null;
+  }
+
   return (
     <>
       <Modal
         isOpen={isOpen}
         onClose={closeModal}
-        title="User Management"
+        title="Tenant User Management"
         size="xl"
       >
         {/* Create User Form */}
@@ -179,14 +178,7 @@ export default function AdminModal() {
                 className="h-9 px-3 text-sm bg-surface border border-border focus:outline-none focus:border-primary"
               >
                 <option value="user">User</option>
-                {currentUser?.role === 'super_admin' ? (
-                  <>
-                    <option value="super_admin">Super Admin</option>
-                    <option value="tenant_admin">Tenant Admin</option>
-                  </>
-                ) : currentUser?.role === 'tenant_admin' ? (
-                  <option value="tenant_admin">Tenant Admin</option>
-                ) : null}
+                <option value="tenant_admin">Tenant Admin</option>
               </select>
               <Button type="submit" variant="primary" loading={isCreating} icon={<UserPlus className="w-4 h-4" />}>
                 Create

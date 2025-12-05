@@ -42,13 +42,26 @@ export default function Badge({
 
 // Role badge
 interface RoleBadgeProps {
-  role: 'admin' | 'user';
+  role: 'super_admin' | 'tenant_admin' | 'user' | 'admin'; // 'admin' for backward compatibility
 }
 
 export function RoleBadge({ role }: RoleBadgeProps) {
+  // Map roles to variants
+  const roleVariant = role === 'super_admin' || role === 'admin' 
+    ? 'primary' 
+    : role === 'tenant_admin' 
+    ? 'warning' 
+    : 'default';
+  
+  // Display name
+  const displayName = role === 'super_admin' ? 'Super Admin' 
+    : role === 'tenant_admin' ? 'Tenant Admin'
+    : role === 'admin' ? 'Admin' // Backward compatibility
+    : 'User';
+  
   return (
-    <Badge variant={role === 'admin' ? 'primary' : 'default'}>
-      {role}
+    <Badge variant={roleVariant}>
+      {displayName}
     </Badge>
   );
 }

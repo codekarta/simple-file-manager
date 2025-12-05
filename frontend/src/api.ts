@@ -101,9 +101,13 @@ export async function deleteApiToken(password: string): Promise<void> {
 
 // ===== Admin User Management =====
 
-export async function listUsers(): Promise<UserListResponse['users']> {
+export async function listUsers(tenantId?: string | null): Promise<UserListResponse['users']> {
   try {
-    const { data } = await api.get<UserListResponse>('/admin/users');
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+    const { data } = await api.get<UserListResponse>('/admin/users', { params });
     return data.users;
   } catch (error) {
     handleError(error);
@@ -112,11 +116,17 @@ export async function listUsers(): Promise<UserListResponse['users']> {
 
 export async function createUser(
   username: string,
-  role: 'admin' | 'user',
-  password: string
+  role: 'super_admin' | 'tenant_admin' | 'user',
+  password: string,
+  tenantId?: string | null
 ): Promise<CreateUserResponse['user']> {
   try {
-    const { data } = await api.post<CreateUserResponse>('/admin/users', { username, role, password });
+    const { data } = await api.post<CreateUserResponse>('/admin/users', {
+      username,
+      role,
+      password,
+      tenantId,
+    });
     return data.user;
   } catch (error) {
     handleError(error);
@@ -146,18 +156,103 @@ export async function resetUserPassword(
   }
 }
 
+// ===== Tenant Management (Super Admin) =====
+
+export interface Tenant {
+  tenantId: string;
+  name: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+}
+
+export async function listTenants(): Promise<Tenant[]> {
+  try {
+    const { data } = await api.get<{ success: boolean; tenants: Tenant[] }>('/super-admin/tenants');
+    return data.tenants;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function getTenant(tenantId: string): Promise<Tenant> {
+  try {
+    const { data } = await api.get<{ success: boolean; tenant: Tenant }>(`/super-admin/tenants/${tenantId}`);
+    return data.tenant;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function createTenant(name: string): Promise<Tenant> {
+  try {
+    const { data } = await api.post<{ success: boolean; tenant: Tenant }>('/super-admin/tenants', { name });
+    return data.tenant;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function updateTenant(tenantId: string, name: string): Promise<Tenant> {
+  try {
+    const { data } = await api.put<{ success: boolean; tenant: Tenant }>(`/super-admin/tenants/${tenantId}`, { name });
+    return data.tenant;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function deleteTenant(tenantId: string): Promise<void> {
+  try {
+    await api.delete(`/super-admin/tenants/${tenantId}`);
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function getTenantUsers(tenantId: string): Promise<UserListResponse['users']> {
+  try {
+    const { data } = await api.get<UserListResponse>(`/super-admin/tenants/${tenantId}/users`);
+    return data.users;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function createTenantUser(
+  tenantId: string,
+  username: string,
+  role: 'tenant_admin' | 'user',
+  password: string
+): Promise<CreateUserResponse['user']> {
+  try {
+    const { data } = await api.post<CreateUserResponse>(`/super-admin/tenants/${tenantId}/users`, {
+      username,
+      role,
+      password,
+    });
+    return data.user;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
 // ===== File Operations =====
 
 export async function getFiles(
   path: string = '',
   page: number = 1,
   limit: number = 50,
-  showHidden: boolean = false
+  showHidden: boolean = false,
+  tenantId?: string | null
 ): Promise<FilesResponse> {
   try {
-    const { data } = await api.get<FilesResponse>('/files', {
-      params: { path, page, limit, showHidden },
-    });
+    const params: Record<string, any> = { path, page, limit, showHidden };
+    // Always include tenantId in params if provided (even if null, to distinguish from undefined)
+    if (tenantId !== undefined && tenantId !== null) {
+      params.tenantId = tenantId;
+    }
+    const { data } = await api.get<FilesResponse>('/files', { params });
     return data;
   } catch (error) {
     handleError(error);
@@ -169,12 +264,15 @@ export async function searchFiles(
   regex: boolean = false,
   page: number = 1,
   limit: number = 50,
-  showHidden: boolean = false
+  showHidden: boolean = false,
+  tenantId?: string | null
 ): Promise<SearchResponse> {
   try {
-    const { data } = await api.get<SearchResponse>('/search', {
-      params: { q: query, regex, page, limit, showHidden },
-    });
+    const params: Record<string, any> = { q: query, regex, page, limit, showHidden };
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+    const { data } = await api.get<SearchResponse>('/search', { params });
     return data;
   } catch (error) {
     handleError(error);
@@ -186,7 +284,8 @@ export async function uploadFiles(
   basePath: string = '',
   accessLevel: 'public' | 'private' = 'public',
   relativePaths?: string[],
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  tenantId?: string | null
 ): Promise<UploadResponse> {
   try {
     const formData = new FormData();
@@ -203,7 +302,13 @@ export async function uploadFiles(
       });
     }
 
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+
     const { data } = await api.post<UploadResponse>('/upload', formData, {
+      params,
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -226,7 +331,8 @@ export async function uploadSingleFile(
   basePath: string = '',
   accessLevel: 'public' | 'private' = 'public',
   relativePath?: string,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  tenantId?: string | null
 ): Promise<UploadResponse> {
   try {
     const formData = new FormData();
@@ -238,7 +344,13 @@ export async function uploadSingleFile(
       formData.append('relativePaths', relativePath);
     }
 
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+
     const { data } = await api.post<UploadResponse>('/upload', formData, {
+      params,
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -258,10 +370,15 @@ export async function uploadSingleFile(
 export async function createFolder(
   path: string,
   name: string,
-  accessLevel: 'public' | 'private' = 'public'
+  accessLevel: 'public' | 'private' = 'public',
+  tenantId?: string | null
 ): Promise<void> {
   try {
-    await api.post('/folder', { path, name, mediaAccessLevel: accessLevel });
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+    await api.post('/folder', { path, name, mediaAccessLevel: accessLevel }, { params });
   } catch (error) {
     handleError(error);
   }
@@ -271,43 +388,64 @@ export async function createFile(
   path: string,
   name: string,
   content: string = '',
-  accessLevel: 'public' | 'private' = 'public'
+  accessLevel: 'public' | 'private' = 'public',
+  tenantId?: string | null
 ): Promise<void> {
   try {
-    await api.post('/file', { path, name, content, mediaAccessLevel: accessLevel });
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+    await api.post('/file', { path, name, content, mediaAccessLevel: accessLevel }, { params });
   } catch (error) {
     handleError(error);
   }
 }
 
-export async function deleteItem(path: string): Promise<void> {
+export async function deleteItem(path: string, tenantId?: string | null): Promise<void> {
   try {
-    await api.delete('/delete', { data: { path } });
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+    await api.delete('/delete', { data: { path }, params });
   } catch (error) {
     handleError(error);
   }
 }
 
-export async function renameItem(path: string, newName: string): Promise<void> {
+export async function renameItem(path: string, newName: string, tenantId?: string | null): Promise<void> {
   try {
-    await api.post('/rename', { path, newName });
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+    await api.post('/rename', { path, newName }, { params });
   } catch (error) {
     handleError(error);
   }
 }
 
-export async function duplicateItem(path: string): Promise<{ success: boolean; newPath: string; newName: string }> {
+export async function duplicateItem(path: string, tenantId?: string | null): Promise<{ success: boolean; newPath: string; newName: string }> {
   try {
-    const { data } = await api.post<{ success: boolean; newPath: string; newName: string }>('/duplicate', { path });
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+    const { data } = await api.post<{ success: boolean; newPath: string; newName: string }>('/duplicate', { path }, { params });
     return data;
   } catch (error) {
     handleError(error);
   }
 }
 
-export async function moveItem(path: string, destination: string): Promise<{ success: boolean; newPath: string }> {
+export async function moveItem(path: string, destination: string, tenantId?: string | null): Promise<{ success: boolean; newPath: string }> {
   try {
-    const { data } = await api.post<{ success: boolean; newPath: string }>('/move', { path, destination });
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+    const { data } = await api.post<{ success: boolean; newPath: string }>('/move', { path, destination }, { params });
     return data;
   } catch (error) {
     handleError(error);
@@ -316,26 +454,45 @@ export async function moveItem(path: string, destination: string): Promise<{ suc
 
 export async function updateAccessLevel(
   path: string,
-  accessLevel: 'public' | 'private'
+  accessLevel: 'public' | 'private',
+  tenantId?: string | null
 ): Promise<void> {
   try {
-    await api.post('/access-level', { path, accessLevel });
+    const params: Record<string, any> = {};
+    if (tenantId) {
+      params.tenantId = tenantId;
+    }
+    await api.post('/access-level', { path, accessLevel }, { params });
   } catch (error) {
     handleError(error);
   }
 }
 
-export function getDownloadUrl(path: string): string {
-  return `/api/download?path=${encodeURIComponent(path)}`;
+export function getDownloadUrl(path: string, tenantId?: string | null): string {
+  const params = new URLSearchParams({ path });
+  if (tenantId) {
+    params.set('tenantId', tenantId);
+  }
+  return `/api/download?${params.toString()}`;
 }
 
-export function getShareableLink(path: string, apiKey?: string): string {
+export function getShareableLink(path: string, apiKey?: string, tenantId?: string | null): string {
   const baseUrl = window.location.origin;
-  const encodedPath = encodeURIComponent(path);
-  if (apiKey) {
-    return `${baseUrl}/api/download?path=${encodedPath}&apiKey=${encodeURIComponent(apiKey)}`;
+  const params = new URLSearchParams({ path: encodeURIComponent(path) });
+  if (tenantId) {
+    params.set('tenantId', tenantId);
   }
-  return `${baseUrl}/api/download?path=${encodedPath}`;
+  if (apiKey) {
+    params.set('apiKey', apiKey);
+  }
+  return `${baseUrl}/api/download?${params.toString()}`;
+}
+
+export function getFileUrl(path: string, tenantId?: string | null): string {
+  if (tenantId) {
+    return `/${tenantId}/${path}`;
+  }
+  return `/${path}`;
 }
 
 // ===== Storage =====
