@@ -7,11 +7,14 @@ import {
   Lock,
   Unlock,
   MoreVertical,
+  Copy,
+  Move,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { useFiles, useModal, useApp } from '../store';
 import type { FileItem } from '../types';
 import { FileGridIcon } from './FileIcon';
-import { formatFileSize, cn } from '../utils';
+import { formatFileSize, cn, isImageFile, isVideoFile } from '../utils';
 import * as api from '../api';
 
 export default function FileGrid() {
@@ -22,7 +25,17 @@ export default function FileGrid() {
   const handleFileClick = (file: FileItem) => {
     if (file.isDirectory) {
       loadFiles(file.path);
+    } else if (isImageFile(file.name) || isVideoFile(file.name)) {
+      // Open gallery/slideshow for images and videos
+      const mediaFiles = optimisticFiles.filter(
+        (f) => !f.isDirectory && (isImageFile(f.name) || isVideoFile(f.name))
+      );
+      const foundIndex = mediaFiles.findIndex((f) => f.path === file.path);
+      if (foundIndex >= 0) {
+        openModal('slideshow', { initialIndex: foundIndex });
+      }
     } else {
+      // For other file types, open in new tab (existing behavior)
       window.open(`/${file.path}`, '_blank');
     }
   };
@@ -50,6 +63,30 @@ export default function FileGrid() {
     }
   };
 
+  const handleDuplicate = async (file: FileItem) => {
+    try {
+      await api.duplicateItem(file.path);
+      showToast(`Duplicated "${file.name}"`, 'success');
+      loadFiles(currentPath);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to duplicate', 'error');
+    }
+  };
+
+  const handleMove = (file: FileItem) => {
+    openModal('move', { path: file.path, name: file.name });
+  };
+
+  const handleCopyLink = async (file: FileItem) => {
+    try {
+      const link = api.getShareableLink(file.path);
+      await navigator.clipboard.writeText(link);
+      showToast('Link copied to clipboard', 'success');
+    } catch (error) {
+      showToast('Failed to copy link', 'error');
+    }
+  };
+
   return (
     <div className="file-grid p-4">
       {optimisticFiles.map((file, index) => (
@@ -61,6 +98,9 @@ export default function FileGrid() {
           onToggleSelect={() => toggleFileSelection(file.path)}
           onClick={() => handleFileClick(file)}
           onDownload={() => handleDownload(file.path)}
+          onDuplicate={() => handleDuplicate(file)}
+          onMove={() => handleMove(file)}
+          onCopyLink={() => handleCopyLink(file)}
           onRename={() => handleRename(file)}
           onDelete={() => handleDelete(file)}
           onToggleAccess={() => handleToggleAccess(file)}
@@ -77,6 +117,9 @@ interface FileGridItemProps {
   onToggleSelect: () => void;
   onClick: () => void;
   onDownload: () => void;
+  onDuplicate: () => void;
+  onMove: () => void;
+  onCopyLink: () => void;
   onRename: () => void;
   onDelete: () => void;
   onToggleAccess: () => void;
@@ -89,6 +132,9 @@ function FileGridItem({
   onToggleSelect,
   onClick,
   onDownload,
+  onDuplicate,
+  onMove,
+  onCopyLink,
   onRename,
   onDelete,
   onToggleAccess,
@@ -164,6 +210,38 @@ function FileGridItem({
                 <Download className="w-4 h-4" />
                 {file.isDirectory ? 'Download ZIP' : 'Download'}
               </button>
+              <button
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
+                onClick={() => {
+                  onDuplicate();
+                  setShowMenu(false);
+                }}
+              >
+                <Copy className="w-4 h-4" />
+                Duplicate
+              </button>
+              <button
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
+                onClick={() => {
+                  onMove();
+                  setShowMenu(false);
+                }}
+              >
+                <Move className="w-4 h-4" />
+                Move
+              </button>
+              {!file.isDirectory && (
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
+                  onClick={() => {
+                    onCopyLink();
+                    setShowMenu(false);
+                  }}
+                >
+                  <LinkIcon className="w-4 h-4" />
+                  Copy link
+                </button>
+              )}
               <button
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
                 onClick={() => {

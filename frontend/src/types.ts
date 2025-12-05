@@ -166,6 +166,7 @@ export type ModalType =
   | 'admin'
   | 'about'
   | 'slideshow'
+  | 'move'
   | null;
 
 export interface ModalState {

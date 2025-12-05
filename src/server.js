@@ -1175,6 +1175,190 @@ app.post('/api/rename', requireAuth, async (req, res) => {
   }
 });
 
+// Duplicate file or folder
+app.post('/api/duplicate', requireAuth, async (req, res) => {
+  try {
+    const { path: itemPath } = req.body;
+    if (!itemPath) {
+      return res.status(400).json({ error: 'Path is required' });
+    }
+
+    const sourcePath = path.join(uploadsPath, itemPath);
+    
+    if (!sourcePath.startsWith(uploadsPath)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!existsSync(sourcePath)) {
+      return res.status(404).json({ error: 'File or folder not found' });
+    }
+
+    const stats = await fs.stat(sourcePath);
+    const isDirectory = stats.isDirectory();
+    const dirName = path.dirname(sourcePath);
+    const baseName = path.basename(sourcePath);
+    const ext = path.extname(baseName);
+    const nameWithoutExt = path.basename(baseName, ext);
+
+    // Generate new name with (copy) suffix
+    let newName = isDirectory 
+      ? `${baseName} (copy)`
+      : `${nameWithoutExt} (copy)${ext}`;
+    let newPath = path.join(dirName, newName);
+    let counter = 1;
+
+    // If name exists, increment counter
+    while (existsSync(newPath)) {
+      counter++;
+      newName = isDirectory
+        ? `${baseName} (copy ${counter})`
+        : `${nameWithoutExt} (copy ${counter})${ext}`;
+      newPath = path.join(dirName, newName);
+    }
+
+    // Copy file or directory
+    if (isDirectory) {
+      // Recursively copy directory
+      await fs.cp(sourcePath, newPath, { recursive: true });
+    } else {
+      // Copy file
+      await fs.copyFile(sourcePath, newPath);
+    }
+
+    const newRelativePath = path.relative(uploadsPath, newPath);
+
+    // Update cache
+    try {
+      if (isDirectory) {
+        // For directories, we need to rebuild cache for that path
+        // Or add all files recursively - for now, trigger a sync
+        fileCache.syncDirectory(path.relative(uploadsPath, dirName));
+      } else {
+        // Add single file to cache
+        const newStats = await fs.stat(newPath);
+        const accessLevel = fileCache.isReady() 
+          ? fileCache.getAccessLevel(itemPath) 
+          : 'public';
+        fileCache.addFile(newRelativePath, newStats, accessLevel);
+      }
+    } catch (cacheErr) {
+      console.warn('Cache update failed for duplicate:', itemPath);
+    }
+
+    // Copy thumbnail if it's an image file
+    if (!isDirectory && thumbnailGenerator.isImageFile(itemPath)) {
+      try {
+        const oldThumbPath = thumbnailGenerator.getThumbnailFullPath(itemPath);
+        const newThumbPath = thumbnailGenerator.getThumbnailFullPath(newRelativePath);
+        if (existsSync(oldThumbPath)) {
+          await fs.copyFile(oldThumbPath, newThumbPath);
+        } else {
+          // Generate thumbnail if it doesn't exist
+          thumbnailGenerator.generateThumbnail(newRelativePath).catch(err => {
+            console.warn('Thumbnail generation failed for:', newRelativePath, err.message);
+          });
+        }
+      } catch (thumbErr) {
+        console.warn('Thumbnail copy failed for:', itemPath, thumbErr.message);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Duplicated successfully',
+      newPath: newRelativePath,
+      newName 
+    });
+  } catch (error) {
+    console.error('Duplicate error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Move file or folder
+app.post('/api/move', requireAuth, async (req, res) => {
+  try {
+    const { path: itemPath, destination } = req.body;
+    if (!itemPath || !destination) {
+      return res.status(400).json({ error: 'Path and destination are required' });
+    }
+
+    const sourcePath = path.join(uploadsPath, itemPath);
+    const destDir = path.join(uploadsPath, destination);
+    const fileName = path.basename(sourcePath);
+    const targetPath = path.join(destDir, fileName);
+
+    // Security checks
+    if (!sourcePath.startsWith(uploadsPath) || !targetPath.startsWith(uploadsPath)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!existsSync(sourcePath)) {
+      return res.status(404).json({ error: 'Source file or folder not found' });
+    }
+
+    if (!existsSync(destDir)) {
+      return res.status(404).json({ error: 'Destination folder not found' });
+    }
+
+    const stats = await fs.stat(sourcePath);
+    const isDirectory = stats.isDirectory();
+
+    // Prevent moving into itself or subdirectory
+    if (targetPath.startsWith(sourcePath + path.sep) || targetPath === sourcePath) {
+      return res.status(400).json({ error: 'Cannot move into itself or subdirectory' });
+    }
+
+    // Check if target already exists
+    if (existsSync(targetPath)) {
+      return res.status(400).json({ error: 'A file or folder with this name already exists in the destination' });
+    }
+
+    // Move the file/folder
+    await fs.rename(sourcePath, targetPath);
+
+    const newRelativePath = path.relative(uploadsPath, targetPath);
+
+    // Update cache
+    try {
+      if (isDirectory) {
+        // For directories, use renameFile which handles recursive updates
+        fileCache.renameFile(itemPath, newRelativePath);
+      } else {
+        // For files, use renameFile
+        fileCache.renameFile(itemPath, newRelativePath);
+      }
+    } catch (cacheErr) {
+      console.warn('Cache update failed for move:', itemPath);
+    }
+
+    // Move thumbnail if it's an image file
+    if (!isDirectory && thumbnailGenerator.isImageFile(itemPath)) {
+      try {
+        await thumbnailGenerator.renameThumbnail(itemPath, newRelativePath);
+      } catch (thumbErr) {
+        console.warn('Thumbnail move failed for:', itemPath, thumbErr.message);
+      }
+    } else if (isDirectory) {
+      // Move thumbnail directory
+      try {
+        await thumbnailGenerator.renameThumbnailDirectory(itemPath, newRelativePath);
+      } catch (thumbErr) {
+        console.warn('Thumbnail directory move failed for:', itemPath, thumbErr.message);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Moved successfully',
+      newPath: newRelativePath
+    });
+  } catch (error) {
+    console.error('Move error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Download file or folder (folders are automatically zipped)
 app.get('/api/download', requireAuth, async (req, res) => {
   try {

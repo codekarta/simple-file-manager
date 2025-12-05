@@ -296,6 +296,24 @@ export async function renameItem(path: string, newName: string): Promise<void> {
   }
 }
 
+export async function duplicateItem(path: string): Promise<{ success: boolean; newPath: string; newName: string }> {
+  try {
+    const { data } = await api.post<{ success: boolean; newPath: string; newName: string }>('/duplicate', { path });
+    return data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function moveItem(path: string, destination: string): Promise<{ success: boolean; newPath: string }> {
+  try {
+    const { data } = await api.post<{ success: boolean; newPath: string }>('/move', { path, destination });
+    return data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
 export async function updateAccessLevel(
   path: string,
   accessLevel: 'public' | 'private'
@@ -309,6 +327,15 @@ export async function updateAccessLevel(
 
 export function getDownloadUrl(path: string): string {
   return `/api/download?path=${encodeURIComponent(path)}`;
+}
+
+export function getShareableLink(path: string, apiKey?: string): string {
+  const baseUrl = window.location.origin;
+  const encodedPath = encodeURIComponent(path);
+  if (apiKey) {
+    return `${baseUrl}/api/download?path=${encodedPath}&apiKey=${encodeURIComponent(apiKey)}`;
+  }
+  return `${baseUrl}/api/download?path=${encodedPath}`;
 }
 
 // ===== Storage =====

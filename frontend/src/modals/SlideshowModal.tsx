@@ -15,14 +15,16 @@ import {
   Minimize2,
 } from 'lucide-react';
 import { useFiles, useModal } from '../store';
-import { formatFileSize, formatDateTime, isImageFile, cn } from '../utils';
+import { formatFileSize, formatDateTime, isImageFile, isVideoFile, cn } from '../utils';
 import type { FileItem } from '../types';
 
 export default function SlideshowModal() {
   const { optimisticFiles } = useFiles();
-  const { activeModal, closeModal } = useModal();
+  const { activeModal, closeModal, modalData } = useModal();
 
-  const [currentIndex, setCurrentIndex] = useState(0);
+  // Get initial index from modal data if provided
+  const initialIndex = (modalData as { initialIndex?: number } | undefined)?.initialIndex ?? 0;
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showDetails, setShowDetails] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -30,33 +32,43 @@ export default function SlideshowModal() {
   const [imageError, setImageError] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const isOpen = activeModal === 'slideshow';
 
-  // Filter only image files
-  const imageFiles = optimisticFiles.filter(
-    (file) => !file.isDirectory && isImageFile(file.name)
+  // Filter image and video files
+  const mediaFiles = optimisticFiles.filter(
+    (file) => !file.isDirectory && (isImageFile(file.name) || isVideoFile(file.name))
   );
 
-  const currentFile = imageFiles[currentIndex];
-  const hasImages = imageFiles.length > 0;
+  const currentFile = mediaFiles[currentIndex];
+  const hasMedia = mediaFiles.length > 0;
+  const isVideo = currentFile ? isVideoFile(currentFile.name) : false;
 
   // Navigation
   const goToNext = useCallback(() => {
-    if (imageFiles.length > 0) {
+    if (mediaFiles.length > 0) {
+      // Pause video if playing
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
       setImageLoaded(false);
       setImageError(false);
-      setCurrentIndex((prev) => (prev + 1) % imageFiles.length);
+      setCurrentIndex((prev) => (prev + 1) % mediaFiles.length);
     }
-  }, [imageFiles.length]);
+  }, [mediaFiles.length]);
 
   const goToPrev = useCallback(() => {
-    if (imageFiles.length > 0) {
+    if (mediaFiles.length > 0) {
+      // Pause video if playing
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
       setImageLoaded(false);
       setImageError(false);
-      setCurrentIndex((prev) => (prev - 1 + imageFiles.length) % imageFiles.length);
+      setCurrentIndex((prev) => (prev - 1 + mediaFiles.length) % mediaFiles.length);
     }
-  }, [imageFiles.length]);
+  }, [mediaFiles.length]);
 
   const goToIndex = useCallback((index: number) => {
     setImageLoaded(false);
@@ -64,9 +76,10 @@ export default function SlideshowModal() {
     setCurrentIndex(index);
   }, []);
 
-  // Auto-play
+  // Auto-play for images (videos handle their own playback)
   useEffect(() => {
-    if (isPlaying && hasImages) {
+    // Only auto-advance for images, not videos
+    if (isPlaying && hasMedia && !isVideo) {
       intervalRef.current = setInterval(goToNext, 3000); // 3 seconds per image
     } else {
       if (intervalRef.current) {
@@ -80,7 +93,32 @@ export default function SlideshowModal() {
         clearInterval(intervalRef.current);
       }
     };
-  }, [isPlaying, hasImages, goToNext]);
+  }, [isPlaying, hasMedia, isVideo, goToNext]);
+
+  // Handle video playback when slideshow play/pause is toggled
+  useEffect(() => {
+    if (!isVideo || !videoRef.current) return;
+
+    if (isPlaying) {
+      videoRef.current.play().catch(() => {
+        // Auto-play may be blocked by browser
+        setIsPlaying(false);
+      });
+    } else {
+      videoRef.current.pause();
+    }
+  }, [isPlaying, isVideo]);
+
+  // Auto-play video when navigating to it (if slideshow is playing)
+  useEffect(() => {
+    if (isVideo && videoRef.current && isPlaying) {
+      videoRef.current.play().catch(() => {
+        setIsPlaying(false);
+      });
+    } else if (isVideo && videoRef.current && !isPlaying) {
+      videoRef.current.pause();
+    }
+  }, [currentIndex, isVideo, isPlaying]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -98,7 +136,19 @@ export default function SlideshowModal() {
           break;
         case ' ':
           e.preventDefault();
-          setIsPlaying((prev) => !prev);
+          if (isVideo && videoRef.current) {
+            // For videos, toggle video playback directly
+            if (videoRef.current.paused) {
+              videoRef.current.play().catch(() => {});
+              setIsPlaying(true);
+            } else {
+              videoRef.current.pause();
+              setIsPlaying(false);
+            }
+          } else {
+            // For images, toggle slideshow auto-play
+            setIsPlaying((prev) => !prev);
+          }
           break;
         case 'Escape':
           if (isFullscreen) {
@@ -124,15 +174,20 @@ export default function SlideshowModal() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, goToNext, goToPrev, closeModal, isFullscreen]);
 
-  // Reset on close
+  // Reset on close or update index when modal opens with new initialIndex
   useEffect(() => {
     if (!isOpen) {
       setCurrentIndex(0);
       setIsPlaying(false);
       setImageLoaded(false);
       setImageError(false);
+    } else if (initialIndex !== undefined && initialIndex >= 0 && initialIndex < mediaFiles.length) {
+      // Set initial index when modal opens
+      setCurrentIndex(initialIndex);
+      setImageLoaded(false);
+      setImageError(false);
     }
-  }, [isOpen]);
+  }, [isOpen, initialIndex, mediaFiles.length]);
 
   // Fullscreen handling
   const toggleFullscreen = useCallback(() => {
@@ -188,9 +243,9 @@ export default function SlideshowModal() {
             <div className="flex items-center gap-2">
               <Image className="w-5 h-5" />
               <span className="font-medium">
-                {hasImages
-                  ? `${currentIndex + 1} of ${imageFiles.length}`
-                  : 'No images'}
+                {hasMedia
+                  ? `${currentIndex + 1} of ${mediaFiles.length}`
+                  : 'No media'}
               </span>
             </div>
           </div>
@@ -241,7 +296,7 @@ export default function SlideshowModal() {
 
         {/* Main content */}
         <div className="flex-1 flex items-center justify-center relative overflow-hidden">
-          {hasImages ? (
+          {hasMedia ? (
             <>
               {/* Previous button */}
               <button
@@ -252,7 +307,7 @@ export default function SlideshowModal() {
                 <ChevronLeft className="w-8 h-8" />
               </button>
 
-              {/* Image */}
+              {/* Media (Image or Video) */}
               <AnimatePresence mode="wait">
                 <motion.div
                   key={currentIndex}
@@ -262,31 +317,72 @@ export default function SlideshowModal() {
                   transition={{ duration: 0.3 }}
                   className="max-w-full max-h-full flex items-center justify-center p-4"
                 >
-                  {!imageLoaded && !imageError && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    </div>
-                  )}
-                  {imageError ? (
-                    <div className="flex flex-col items-center justify-center text-white/60 p-8">
-                      <Image className="w-16 h-16 mb-4 opacity-50" />
-                      <p className="text-lg">Failed to load image</p>
-                      <p className="text-sm mt-2 text-white/40">{currentFile.name}</p>
-                    </div>
-                  ) : (
-                    <img
-                      src={getImageUrl(currentFile)}
-                      alt={currentFile.name}
-                      className={cn(
-                        'max-w-full max-h-[calc(100vh-200px)] object-contain transition-opacity duration-300',
-                        imageLoaded ? 'opacity-100' : 'opacity-0'
+                  {isVideo ? (
+                    <>
+                      {!imageLoaded && !imageError && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        </div>
                       )}
-                      onLoad={() => setImageLoaded(true)}
-                      onError={() => {
-                        setImageLoaded(true);
-                        setImageError(true);
-                      }}
-                    />
+                      {imageError ? (
+                        <div className="flex flex-col items-center justify-center text-white/60 p-8">
+                          <Image className="w-16 h-16 mb-4 opacity-50" />
+                          <p className="text-lg">Failed to load video</p>
+                          <p className="text-sm mt-2 text-white/40">{currentFile.name}</p>
+                        </div>
+                      ) : (
+                        <video
+                          ref={videoRef}
+                          src={getImageUrl(currentFile)}
+                          className={cn(
+                            'max-w-full max-h-[calc(100vh-200px)] object-contain transition-opacity duration-300',
+                            imageLoaded ? 'opacity-100' : 'opacity-0'
+                          )}
+                          controls
+                          playsInline
+                          onLoadedData={() => setImageLoaded(true)}
+                          onError={() => {
+                            setImageLoaded(true);
+                            setImageError(true);
+                          }}
+                          onEnded={() => {
+                            // Auto-advance to next when video ends
+                            if (isPlaying) {
+                              goToNext();
+                            }
+                          }}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {!imageLoaded && !imageError && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        </div>
+                      )}
+                      {imageError ? (
+                        <div className="flex flex-col items-center justify-center text-white/60 p-8">
+                          <Image className="w-16 h-16 mb-4 opacity-50" />
+                          <p className="text-lg">Failed to load image</p>
+                          <p className="text-sm mt-2 text-white/40">{currentFile.name}</p>
+                        </div>
+                      ) : (
+                        <img
+                          src={getImageUrl(currentFile)}
+                          alt={currentFile.name}
+                          className={cn(
+                            'max-w-full max-h-[calc(100vh-200px)] object-contain transition-opacity duration-300',
+                            imageLoaded ? 'opacity-100' : 'opacity-0'
+                          )}
+                          onLoad={() => setImageLoaded(true)}
+                          onError={() => {
+                            setImageLoaded(true);
+                            setImageError(true);
+                          }}
+                        />
+                      )}
+                    </>
                   )}
                 </motion.div>
               </AnimatePresence>
@@ -301,9 +397,9 @@ export default function SlideshowModal() {
               </button>
 
               {/* Progress dots */}
-              {imageFiles.length <= 20 && (
+              {mediaFiles.length <= 20 && (
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
-                  {imageFiles.map((_, index) => (
+                  {mediaFiles.map((_, index) => (
                     <button
                       key={index}
                       onClick={() => goToIndex(index)}
@@ -318,14 +414,14 @@ export default function SlideshowModal() {
                 </div>
               )}
 
-              {/* Progress bar for many images */}
-              {imageFiles.length > 20 && (
+              {/* Progress bar for many media files */}
+              {mediaFiles.length > 20 && (
                 <div className="absolute bottom-4 left-4 right-4">
                   <div className="h-1 bg-white/20 rounded-full overflow-hidden">
                     <motion.div
                       className="h-full bg-white"
                       initial={false}
-                      animate={{ width: `${((currentIndex + 1) / imageFiles.length) * 100}%` }}
+                      animate={{ width: `${((currentIndex + 1) / mediaFiles.length) * 100}%` }}
                       transition={{ duration: 0.3 }}
                     />
                   </div>
@@ -335,8 +431,8 @@ export default function SlideshowModal() {
           ) : (
             <div className="text-center text-white/60">
               <Image className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p className="text-lg">No images in this folder</p>
-              <p className="text-sm mt-2">Upload some images to start a slideshow</p>
+              <p className="text-lg">No media files in this folder</p>
+              <p className="text-sm mt-2">Upload some images or videos to start a slideshow</p>
             </div>
           )}
         </div>
@@ -402,27 +498,36 @@ export default function SlideshowModal() {
         </AnimatePresence>
 
         {/* Thumbnail strip */}
-        {hasImages && imageFiles.length > 1 && imageFiles.length <= 50 && (
+        {hasMedia && mediaFiles.length > 1 && mediaFiles.length <= 50 && (
           <div className="bg-black/80 border-t border-white/10 p-2 overflow-x-auto">
             <div className="flex gap-2 justify-center min-w-max">
-              {imageFiles.map((file, index) => (
-                <button
-                  key={file.path}
-                  onClick={() => goToIndex(index)}
-                  className={cn(
-                    'relative w-16 h-12 shrink-0 overflow-hidden transition-all',
-                    index === currentIndex
-                      ? 'ring-2 ring-primary ring-offset-2 ring-offset-black'
-                      : 'opacity-50 hover:opacity-100'
-                  )}
-                >
-                  <img
-                    src={file.thumbnailUrl || getImageUrl(file)}
-                    alt={file.name}
-                    className="w-full h-full object-cover"
-                  />
-                </button>
-              ))}
+              {mediaFiles.map((file, index) => {
+                const isVideoThumb = isVideoFile(file.name);
+                return (
+                  <button
+                    key={file.path}
+                    onClick={() => goToIndex(index)}
+                    className={cn(
+                      'relative w-16 h-12 shrink-0 overflow-hidden transition-all',
+                      index === currentIndex
+                        ? 'ring-2 ring-primary ring-offset-2 ring-offset-black'
+                        : 'opacity-50 hover:opacity-100'
+                    )}
+                  >
+                    {isVideoThumb ? (
+                      <div className="w-full h-full bg-black/50 flex items-center justify-center">
+                        <Play className="w-6 h-6 text-white/60" />
+                      </div>
+                    ) : (
+                      <img
+                        src={file.thumbnailUrl || getImageUrl(file)}
+                        alt={file.name}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

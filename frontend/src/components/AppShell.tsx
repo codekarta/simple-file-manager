@@ -15,6 +15,7 @@ import SettingsModal from '../modals/SettingsModal';
 import AdminModal from '../modals/AdminModal';
 import AboutModal from '../modals/AboutModal';
 import SlideshowModal from '../modals/SlideshowModal';
+import MoveModal from '../modals/MoveModal';
 
 export default function AppShell() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -51,6 +52,7 @@ export default function AppShell() {
       <AdminModal />
       <AboutModal />
       <SlideshowModal />
+      <MoveModal />
     </div>
   );
 }

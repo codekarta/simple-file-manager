@@ -6,12 +6,15 @@ import {
   Lock,
   Unlock,
   MoreHorizontal,
+  Copy,
+  Move,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { useFiles, useModal, useApp } from '../store';
 import type { FileItem } from '../types';
 import FileIcon from './FileIcon';
 import { AccessBadge } from './Badge';
-import { formatFileSize, formatDateTime, cn } from '../utils';
+import { formatFileSize, formatDateTime, cn, isImageFile, isVideoFile } from '../utils';
 import * as api from '../api';
 import { useState } from 'react';
 
@@ -34,7 +37,17 @@ export default function FileTable() {
   const handleFileClick = (file: FileItem) => {
     if (file.isDirectory) {
       loadFiles(file.path);
+    } else if (isImageFile(file.name) || isVideoFile(file.name)) {
+      // Open gallery/slideshow for images and videos
+      const mediaFiles = optimisticFiles.filter(
+        (f) => !f.isDirectory && (isImageFile(f.name) || isVideoFile(f.name))
+      );
+      const foundIndex = mediaFiles.findIndex((f) => f.path === file.path);
+      if (foundIndex >= 0) {
+        openModal('slideshow', { initialIndex: foundIndex });
+      }
     } else {
+      // For other file types, open in new tab (existing behavior)
       window.open(`/${file.path}`, '_blank');
     }
   };
@@ -63,6 +76,35 @@ export default function FileTable() {
       loadFiles(currentPath);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Failed to change access', 'error');
+    }
+  };
+
+  const handleDuplicate = async (e: React.MouseEvent, file: FileItem) => {
+    e.stopPropagation();
+    try {
+      await api.duplicateItem(file.path);
+      showToast(`Duplicated "${file.name}"`, 'success');
+      loadFiles(currentPath);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to duplicate', 'error');
+    }
+  };
+
+  const handleMove = (e: React.MouseEvent, file: FileItem) => {
+    e.stopPropagation();
+    openModal('move', { path: file.path, name: file.name });
+  };
+
+  const handleCopyLink = async (e: React.MouseEvent, file: FileItem) => {
+    e.stopPropagation();
+    try {
+      // For private files, we need API key - for now, generate link without it
+      // User can generate API token from User settings if needed
+      const link = api.getShareableLink(file.path);
+      await navigator.clipboard.writeText(link);
+      showToast('Link copied to clipboard', 'success');
+    } catch (error) {
+      showToast('Failed to copy link', 'error');
     }
   };
 
@@ -106,6 +148,9 @@ export default function FileTable() {
               onToggleSelect={() => toggleFileSelection(file.path)}
               onClick={() => handleFileClick(file)}
               onDownload={(e) => handleDownload(e, file.path)}
+              onDuplicate={(e) => handleDuplicate(e, file)}
+              onMove={(e) => handleMove(e, file)}
+              onCopyLink={(e) => handleCopyLink(e, file)}
               onRename={(e) => handleRename(e, file)}
               onDelete={(e) => handleDelete(e, file)}
               onToggleAccess={(e) => handleToggleAccess(e, file)}
@@ -124,6 +169,9 @@ interface FileTableRowProps {
   onToggleSelect: () => void;
   onClick: () => void;
   onDownload: (e: React.MouseEvent) => void;
+  onDuplicate: (e: React.MouseEvent) => void;
+  onMove: (e: React.MouseEvent) => void;
+  onCopyLink: (e: React.MouseEvent) => void;
   onRename: (e: React.MouseEvent) => void;
   onDelete: (e: React.MouseEvent) => void;
   onToggleAccess: (e: React.MouseEvent) => void;
@@ -136,6 +184,9 @@ function FileTableRow({
   onToggleSelect,
   onClick,
   onDownload,
+  onDuplicate,
+  onMove,
+  onCopyLink,
   onRename,
   onDelete,
   onToggleAccess,
@@ -199,6 +250,29 @@ function FileTableRow({
               <Download className="w-4 h-4" />
             </button>
             <button
+              onClick={onDuplicate}
+              className="p-1.5 text-subtle hover:text-foreground hover:bg-surface-secondary transition-colors"
+              title="Duplicate"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onMove}
+              className="p-1.5 text-subtle hover:text-foreground hover:bg-surface-secondary transition-colors"
+              title="Move"
+            >
+              <Move className="w-4 h-4" />
+            </button>
+            {!file.isDirectory && (
+              <button
+                onClick={onCopyLink}
+                className="p-1.5 text-subtle hover:text-foreground hover:bg-surface-secondary transition-colors"
+                title="Copy link"
+              >
+                <LinkIcon className="w-4 h-4" />
+              </button>
+            )}
+            <button
               onClick={onRename}
               className="p-1.5 text-subtle hover:text-foreground hover:bg-surface-secondary transition-colors"
               title="Rename"
@@ -250,6 +324,38 @@ function FileTableRow({
                     <Download className="w-4 h-4" />
                     {file.isDirectory ? 'Download ZIP' : 'Download'}
                   </button>
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
+                    onClick={(e) => {
+                      onDuplicate(e);
+                      setShowActions(false);
+                    }}
+                  >
+                    <Copy className="w-4 h-4" />
+                    Duplicate
+                  </button>
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
+                    onClick={(e) => {
+                      onMove(e);
+                      setShowActions(false);
+                    }}
+                  >
+                    <Move className="w-4 h-4" />
+                    Move
+                  </button>
+                  {!file.isDirectory && (
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
+                      onClick={(e) => {
+                        onCopyLink(e);
+                        setShowActions(false);
+                      }}
+                    >
+                      <LinkIcon className="w-4 h-4" />
+                      Copy link
+                    </button>
+                  )}
                   <button
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
                     onClick={(e) => {
