@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+/* Professional Design System - No rounded corners, flat design */
+
+@theme {
+  /* Custom colors using Tailwind v4 @theme syntax */
+  --color-sidebar: #1a1d21;
+  --color-sidebar-hover: #2d3139;
+  --color-sidebar-border: #363b44;
+  --color-sidebar-text: #9ca3af;
+  --color-sidebar-active: #ffffff;
+  
+  --color-surface: #ffffff;
+  --color-surface-secondary: #f6f8fa;
+  --color-surface-tertiary: #f0f2f5;
+  
+  --color-border: #d1d5db;
+  --color-border-subtle: #e5e7eb;
+  
+  --color-foreground: #1f2328;
+  --color-muted: #656d76;
+  --color-subtle: #8b949e;
+  --color-inverse: #ffffff;
+
+  --color-primary: #0969da;
+  --color-primary-hover: #0860c7;
+  --color-primary-subtle: #ddf4ff;
+
+  --color-success: #1a7f37;
+  --color-success-subtle: #dafbe1;
+  --color-danger: #cf222e;
+  --color-danger-subtle: #ffebe9;
+  --color-warning: #9a6700;
+  --color-warning-subtle: #fff8c5;
+
+  /* Font family */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Menlo, monospace;
+}
+
+/* Base styles - handled by Tailwind Preflight */
+/* * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+} */
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #ffffff;
+  color: #1f2328;
+  line-height: 1.5;
+}
+
+/* Remove all default rounded corners */
+button,
+input,
+select,
+textarea {
+  border-radius: 0;
+}
+
+/* Focus styles */
+:focus-visible {
+  outline: 2px solid #0969da;
+  outline-offset: 1px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f6f8fa;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #8b949e;
+}
+
+/* Selection */
+::selection {
+  background-color: #ddf4ff;
+  color: #1f2328;
+}
+
+/* Utility classes */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* File grid layout */
+.file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+  }
+}
+
+/* Drag and drop styles */
+.drag-over {
+  border-color: #0969da !important;
+  background-color: #ddf4ff !important;
+}
