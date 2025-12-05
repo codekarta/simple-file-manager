@@ -154,18 +154,16 @@ function FileGridItem({
               onClick={() => setShowMenu(false)}
             />
             <div className="absolute right-0 top-full mt-1 bg-surface border border-border shadow-lg z-50 min-w-[130px]">
-              {!file.isDirectory && (
-                <button
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
-                  onClick={() => {
-                    onDownload();
-                    setShowMenu(false);
-                  }}
-                >
-                  <Download className="w-4 h-4" />
-                  Download
-                </button>
-              )}
+              <button
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
+                onClick={() => {
+                  onDownload();
+                  setShowMenu(false);
+                }}
+              >
+                <Download className="w-4 h-4" />
+                {file.isDirectory ? 'Download ZIP' : 'Download'}
+              </button>
               <button
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
                 onClick={() => {

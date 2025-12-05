@@ -1,0 +1,69 @@
+.monaco-editor-container {
+    width: 100%;
+    height: 100%;
+    min-height: 800px;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-sizing: border-box;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    background: #1e1e1e;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    padding-left: 14px; /* Leave breathing room for line numbers */
+}
+
+.monaco-editor-container * {
+    text-align: left !important;
+}
+
+/* Ensure Monaco Editor content is left-aligned */
+.monaco-editor-container .monaco-editor,
+.monaco-editor-container .monaco-editor .monaco-editor-background,
+.monaco-editor-container .monaco-editor .margin,
+.monaco-editor-container .monaco-editor .monaco-scrollable-element,
+.monaco-editor-container .monaco-editor .view-lines,
+.monaco-editor-container .monaco-editor .view-line {
+    text-align: left !important;
+}
+
+.monaco-editor-container .monaco-editor .view-line span {
+    text-align: left !important;
+}
+
+/* Fix line numbers truncation - ensure enough space for line numbers */
+.monaco-editor-container .monaco-editor .margin {
+    overflow: visible !important;
+}
+
+.monaco-editor-container .monaco-editor .line-numbers {
+    overflow: visible !important;
+    width: auto !important;
+}
+
+.monaco-editor-container .monaco-editor .margin-view-overlays {
+    overflow: visible !important;
+}
+
+.monaco-editor-container .monaco-editor .margin-view-overlays .line-numbers {
+    display: inline-block !important;
+    min-width: 3ch !important;
+    text-align: right !important;
+    padding-right: 8px !important;
+}
+
+.monaco-editor-container:focus-within {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.monaco-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    font-size: 14px;
+    min-height: 800px;
+}
+

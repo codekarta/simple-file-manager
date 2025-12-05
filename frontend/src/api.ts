@@ -220,6 +220,41 @@ export async function uploadFiles(
   }
 }
 
+// Upload a single file with individual progress tracking
+export async function uploadSingleFile(
+  file: File,
+  basePath: string = '',
+  accessLevel: 'public' | 'private' = 'public',
+  relativePath?: string,
+  onProgress?: (progress: number) => void
+): Promise<UploadResponse> {
+  try {
+    const formData = new FormData();
+    formData.append('basePath', basePath);
+    formData.append('mediaAccessLevel', accessLevel);
+    formData.append('files', file);
+
+    if (relativePath) {
+      formData.append('relativePaths', relativePath);
+    }
+
+    const { data } = await api.post<UploadResponse>('/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(progress);
+        }
+      },
+    });
+    return data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
 export async function createFolder(
   path: string,
   name: string,

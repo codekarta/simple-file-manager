@@ -14,6 +14,7 @@ import {
   X,
   MoreHorizontal,
   RefreshCw,
+  Play,
 } from 'lucide-react';
 import { useFiles, useUI, useModal, useStorage } from '../store';
 import Button from './Button';
@@ -275,6 +276,14 @@ export default function Header({ onMenuClick }: HeaderProps) {
             icon={<RefreshCw className="w-4 h-4" />}
             onClick={handleRefresh}
             title="Refresh"
+          />
+
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Play className="w-4 h-4" />}
+            onClick={() => openModal('slideshow')}
+            title="Slideshow"
           />
           
           <button

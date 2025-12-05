@@ -7,6 +7,7 @@ import fs from 'fs/promises';
 import { existsSync, statSync, createReadStream } from 'fs';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
+import archiver from 'archiver';
 import * as credentialsManager from './credentials-manager.js';
 import * as fileCache from './file-cache.js';
 import * as thumbnailGenerator from './thumbnail-generator.js';
@@ -331,6 +332,18 @@ const requireAdmin = async (req, res, next) => {
   }
 };
 
+// Serve static assets from public folder (React build output)
+// This MUST come before the auth-aware uploads middleware
+app.use('/assets', express.static(path.join(__dirname, '..', 'public', 'assets'), {
+  maxAge: '1y', // Cache assets for 1 year (they have hashes in filenames)
+  immutable: true
+}));
+
+// Serve other static files from public folder (favicon, etc.)
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  index: false // Don't serve index.html for / - we handle that separately
+}));
+
 // Auth-aware static file middleware for public/private access control
 // Public files: accessible to everyone
 // Private files: require session or API token authentication
@@ -416,7 +429,7 @@ app.use(async (req, res, next) => {
   return res.sendFile(fullPath);
 });
 
-// Serve admin panel
+// Serve admin panel (React app)
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
@@ -430,12 +443,6 @@ app.get('/api-docs', (req, res) => {
 app.get('/llms.md', (req, res) => {
   res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
   res.sendFile(path.join(__dirname, '..', 'public', 'Simple-file-server-llms.md'));
-});
-
-// Serve admin static assets
-app.get('/admin/:file', (req, res) => {
-  const file = req.params.file;
-  res.sendFile(path.join(__dirname, '..', 'public', file));
 });
 
 // ===== AUTHENTICATION API ROUTES =====
@@ -1168,18 +1175,60 @@ app.post('/api/rename', requireAuth, async (req, res) => {
   }
 });
 
-// Download file
+// Download file or folder (folders are automatically zipped)
 app.get('/api/download', requireAuth, async (req, res) => {
   try {
     const itemPath = req.query.path;
+    if (!itemPath) {
+      return res.status(400).json({ error: 'Path is required' });
+    }
+    
     const fullPath = path.join(uploadsPath, itemPath);
     
     if (!fullPath.startsWith(uploadsPath)) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
-    res.download(fullPath);
+    if (!existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File or folder not found' });
+    }
+    
+    const stats = statSync(fullPath);
+    
+    if (stats.isDirectory()) {
+      // Folder download - create zip on-the-fly
+      const folderName = path.basename(fullPath);
+      const zipFileName = `${folderName}.zip`;
+      
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${zipFileName}"`);
+      
+      const archive = archiver('zip', {
+        zlib: { level: 6 } // Compression level (0-9)
+      });
+      
+      // Handle archive errors
+      archive.on('error', (err) => {
+        console.error('Archive error:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Failed to create archive' });
+        }
+      });
+      
+      // Pipe archive to response
+      archive.pipe(res);
+      
+      // Add the folder contents to the archive
+      archive.directory(fullPath, folderName);
+      
+      // Finalize the archive
+      await archive.finalize();
+    } else {
+      // File download
+      res.download(fullPath);
+    }
   } catch (error) {
+    console.error('Download error:', error);
     res.status(500).json({ error: error.message });
   }
 });

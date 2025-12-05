@@ -149,9 +149,7 @@ curl -H "Authorization: Bearer TOKEN" "http://localhost:3000/api/files?showHidde
       "isDirectory": true,
       "size": 0,
       "modified": "2024-10-09T10:30:00.000Z",
-      "created": "2024-10-08T14:20:00.000Z",
-      "accessLevel": "public",
-      "thumbnailUrl": null
+      "created": "2024-10-08T14:20:00.000Z"
     },
     {
       "name": "tshirt.jpg",
@@ -159,9 +157,7 @@ curl -H "Authorization: Bearer TOKEN" "http://localhost:3000/api/files?showHidde
       "isDirectory": false,
       "size": 245678,
       "modified": "2024-10-09T10:30:00.000Z",
-      "created": "2024-10-08T14:20:00.000Z",
-      "accessLevel": "private",
-      "thumbnailUrl": "/thumb/products/tshirt.webp"
+      "created": "2024-10-08T14:20:00.000Z"
     }
   ],
   "pagination": {
@@ -178,7 +174,7 @@ curl -H "Authorization: Bearer TOKEN" "http://localhost:3000/api/files?showHidde
 ---
 
 #### POST /api/upload
-Upload one or more files. Supports folder structure preservation and access level control.
+Upload one or more files. Supports folder structure preservation.
 
 **Content-Type:** `multipart/form-data`
 
@@ -188,22 +184,14 @@ Upload one or more files. Supports folder structure preservation and access leve
 | files | File[] | Files to upload (max 500 files, 100MB each) |
 | basePath | string | Target directory path |
 | relativePaths | string[] | Preserve folder structure (for folder upload) |
-| mediaAccessLevel | string | Access level: "public" (default) or "private" |
 
 **Examples:**
 ```bash
-# Single file upload (public by default)
+# Single file upload
 curl -H "Authorization: Bearer TOKEN" \
   -X POST http://localhost:3000/api/upload \
   -F "basePath=products" \
   -F "files=@image.jpg"
-
-# Upload private file
-curl -H "Authorization: Bearer TOKEN" \
-  -X POST http://localhost:3000/api/upload \
-  -F "basePath=products" \
-  -F "files=@secret.pdf" \
-  -F "mediaAccessLevel=private"
 
 # Multiple files
 curl -H "Authorization: Bearer TOKEN" \
@@ -239,38 +227,29 @@ curl -H "Authorization: Bearer TOKEN" \
 ---
 
 #### POST /api/folder
-Create a new folder with optional access level control.
+Create a new folder.
 
 **Request Body:**
 ```json
 {
   "path": "string (parent directory, empty for root)",
-  "name": "string (folder name)",
-  "mediaAccessLevel": "string (optional: 'public' or 'private', default: 'public')"
+  "name": "string (folder name)"
 }
 ```
 
 **Example:**
 ```bash
-# Create public folder
 curl -H "Authorization: Bearer TOKEN" \
   -X POST http://localhost:3000/api/folder \
   -H "Content-Type: application/json" \
   -d '{"path":"","name":"documents"}'
-
-# Create private folder
-curl -H "Authorization: Bearer TOKEN" \
-  -X POST http://localhost:3000/api/folder \
-  -H "Content-Type: application/json" \
-  -d '{"path":"","name":"confidential","mediaAccessLevel":"private"}'
 ```
 
 **Response (200):**
 ```json
 {
   "success": true,
-  "message": "Folder created successfully",
-  "accessLevel": "public"
+  "message": "Folder created successfully"
 }
 ```
 
@@ -356,76 +335,6 @@ curl -H "Authorization: Bearer TOKEN" \
 
 ---
 
-### Access Level Control
-
-Files and folders can be set to **public** or **private**:
-- **Public**: Accessible to everyone via direct URL (e.g., `http://localhost:3000/path/to/file.jpg`)
-- **Private**: Requires authentication (session cookie or apiKey parameter) to access via direct URL
-
-Private files inherit from parent folders - if a folder is private, all contents are private.
-
-#### POST /api/access-level
-Change the access level of a file or folder.
-
-**Request Body:**
-```json
-{
-  "path": "string (path to file or folder)",
-  "accessLevel": "string ('public' or 'private')"
-}
-```
-
-**Example:**
-```bash
-# Make a file private
-curl -H "Authorization: Bearer TOKEN" \
-  -X POST http://localhost:3000/api/access-level \
-  -H "Content-Type: application/json" \
-  -d '{"path":"documents/secret.pdf","accessLevel":"private"}'
-
-# Make a folder public
-curl -H "Authorization: Bearer TOKEN" \
-  -X POST http://localhost:3000/api/access-level \
-  -H "Content-Type: application/json" \
-  -d '{"path":"public-assets","accessLevel":"public"}'
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Access level updated to private",
-  "path": "documents/secret.pdf",
-  "accessLevel": "private"
-}
-```
-
-#### Accessing Private Files
-
-Private files can be accessed via direct URL only with authentication:
-
-```bash
-# With session cookie
-curl -b cookies.txt "http://localhost:3000/private/secret.pdf"
-
-# With API token in URL
-curl "http://localhost:3000/private/secret.pdf?apiKey=YOUR_API_TOKEN"
-
-# With Bearer token header
-curl -H "Authorization: Bearer YOUR_API_TOKEN" \
-  "http://localhost:3000/private/secret.pdf"
-```
-
-**Unauthorized Response (401):**
-```json
-{
-  "error": "Authentication required",
-  "message": "This file is private. Please provide a valid session or API token."
-}
-```
-
----
-
 ### Search & Storage
 
 #### GET /api/search
@@ -460,9 +369,7 @@ curl -H "Authorization: Bearer TOKEN" \
       "path": "products/tshirt-red.jpg",
       "isDirectory": false,
       "size": 245678,
-      "modified": "2024-10-09T10:30:00.000Z",
-      "accessLevel": "public",
-      "thumbnailUrl": "/thumb/products/tshirt-red.webp"
+      "modified": "2024-10-09T10:30:00.000Z"
     }
   ],
   "pagination": {
@@ -751,87 +658,6 @@ Force cache rebuild (runs in background).
 {
   "success": true,
   "message": "Cache rebuild started in background"
-}
-```
-
----
-
-### Thumbnail Management
-
-Thumbnails are automatically generated for uploaded images (jpg, jpeg, png, gif, webp, tiff, bmp) and stored in a `.thumbnail` directory with the same path hierarchy as uploads.
-
-#### GET /thumb/{path}
-Access thumbnail for an image file. Thumbnails are 300x300 WebP images.
-
-**Example:**
-```bash
-# Access thumbnail for an image
-curl "http://localhost:3000/thumb/products/tshirt.webp"
-
-# For private images, authentication is required
-curl -H "Authorization: Bearer TOKEN" "http://localhost:3000/thumb/private/photo.webp"
-```
-
-**Response:** WebP image file (300x300 max, aspect ratio preserved)
-
-**Errors:**
-- 404: Thumbnail not found
-- 401: Authentication required (for private images)
-- 503: Thumbnail service not initialized
-
----
-
-#### GET /api/thumbnails/status
-Get thumbnail generator status and configuration.
-
-**Response (200):**
-```json
-{
-  "initialized": true,
-  "uploadsPath": "/path/to/uploads",
-  "thumbnailBasePath": "/path/to/.thumbnail",
-  "thumbnailSize": 300,
-  "thumbnailFormat": "webp",
-  "thumbnailQuality": 80,
-  "supportedExtensions": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".tiff", ".tif", ".bmp"]
-}
-```
-
----
-
-#### POST /api/thumbnails/generate (Admin Only)
-Generate thumbnails for all existing images that don't have thumbnails yet. Runs in background.
-
-**Example:**
-```bash
-curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
-  -X POST http://localhost:3000/api/thumbnails/generate
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Thumbnail generation started in background"
-}
-```
-
----
-
-#### POST /api/thumbnails/sync (Admin Only)
-Sync thumbnails - generates missing thumbnails and removes orphaned ones. Runs in background.
-
-**Example:**
-```bash
-curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
-  -X POST http://localhost:3000/api/thumbnails/sync
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Thumbnail sync started in background"
 }
 ```
 

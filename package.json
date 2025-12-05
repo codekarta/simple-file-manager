@@ -13,6 +13,7 @@
   "description": "Simple file manager with authentication",
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
+    "archiver": "^7.0.1",
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^11.10.0",
     "dotenv": "^16.3.1",

@@ -191,15 +191,13 @@ function FileTableRow({
         <div className="flex items-center justify-end gap-1">
           {/* Desktop actions */}
           <div className="hidden sm:flex items-center gap-1">
-            {!file.isDirectory && (
-              <button
-                onClick={onDownload}
-                className="p-1.5 text-subtle hover:text-foreground hover:bg-surface-secondary transition-colors"
-                title="Download"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              onClick={onDownload}
+              className="p-1.5 text-subtle hover:text-foreground hover:bg-surface-secondary transition-colors"
+              title={file.isDirectory ? 'Download as ZIP' : 'Download'}
+            >
+              <Download className="w-4 h-4" />
+            </button>
             <button
               onClick={onRename}
               className="p-1.5 text-subtle hover:text-foreground hover:bg-surface-secondary transition-colors"
@@ -242,18 +240,16 @@ function FileTableRow({
                   onClick={() => setShowActions(false)}
                 />
                 <div className="absolute right-0 top-full mt-1 bg-surface border border-border shadow-lg z-50 min-w-[120px]">
-                  {!file.isDirectory && (
-                    <button
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
-                      onClick={(e) => {
-                        onDownload(e);
-                        setShowActions(false);
-                      }}
-                    >
-                      <Download className="w-4 h-4" />
-                      Download
-                    </button>
-                  )}
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
+                    onClick={(e) => {
+                      onDownload(e);
+                      setShowActions(false);
+                    }}
+                  >
+                    <Download className="w-4 h-4" />
+                    {file.isDirectory ? 'Download ZIP' : 'Download'}
+                  </button>
                   <button
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-tertiary"
                     onClick={(e) => {

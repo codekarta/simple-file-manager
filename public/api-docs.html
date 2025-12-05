@@ -821,12 +821,17 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="badge badge-get">GET</span>
-          <span class="endpoint-path">/api/download?path={file_path}</span>
+          <span class="endpoint-path">/api/download?path={path}</span>
         </div>
-        <p class="endpoint-description">Download a file</p>
-        <p><strong>Example:</strong></p>
-        <pre><code>curl -b cookies.txt "http://localhost:3000/api/download?path=products/image.jpg" \
-  -o downloaded-image.jpg</code></pre>
+        <p class="endpoint-description">Download a file or folder. Folders are automatically zipped.</p>
+        <p><strong>Examples:</strong></p>
+        <pre><code># Download a file
+curl -b cookies.txt "http://localhost:3000/api/download?path=products/image.jpg" \
+  -o downloaded-image.jpg
+
+# Download a folder (automatically zipped)
+curl -b cookies.txt "http://localhost:3000/api/download?path=products" \
+  -o products.zip</code></pre>
       </div>
 
       <div class="endpoint">

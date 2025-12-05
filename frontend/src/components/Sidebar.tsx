@@ -1,6 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  FolderOpen,
   Home,
   Files,
   Clock,
@@ -72,9 +71,7 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-primary flex items-center justify-center shrink-0">
-            <FolderOpen className="w-5 h-5 text-white" />
-          </div>
+          <img src="/sfm-logo.png" alt="Logo" className="w-8 h-8 object-contain shrink-0" />
           {!sidebarCollapsed && (
             <motion.span
               initial={{ opacity: 0 }}
@@ -114,7 +111,7 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
         {/* Main nav */}
         <div className="px-3 mb-6">
           {!sidebarCollapsed && (
-            <div className="text-[10px] uppercase tracking-wider text-sidebar-text/50 mb-2 px-2">
+            <div className="text-[10px] uppercase tracking-wider text-sidebar-text/70 mb-2 px-2">
               Navigation
             </div>
           )}
@@ -126,7 +123,7 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
               className={cn(
                 'w-full flex items-center gap-3 px-2 py-2 text-sm transition-colors mb-1',
                 item.active
-                  ? 'bg-sidebar-hover text-sidebar-text-active'
+                  ? 'bg-sidebar-hover text-sidebar-active'
                   : 'text-sidebar-text hover:bg-sidebar-hover hover:text-inverse',
                 item.disabled && 'opacity-50 cursor-not-allowed',
                 sidebarCollapsed && 'justify-center'
@@ -141,7 +138,7 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
         {/* Utilities */}
         <div className="px-3 mb-6">
           {!sidebarCollapsed && (
-            <div className="text-[10px] uppercase tracking-wider text-sidebar-text/50 mb-2 px-2">
+            <div className="text-[10px] uppercase tracking-wider text-sidebar-text/70 mb-2 px-2">
               Resources
             </div>
           )}
@@ -181,7 +178,7 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
         {/* Settings */}
         <div className="px-3">
           {!sidebarCollapsed && (
-            <div className="text-[10px] uppercase tracking-wider text-sidebar-text/50 mb-2 px-2">
+            <div className="text-[10px] uppercase tracking-wider text-sidebar-text/70 mb-2 px-2">
               Settings
             </div>
           )}
@@ -218,7 +215,9 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
               <div className="text-sm text-inverse truncate">
                 {user?.username}
               </div>
-              <RoleBadge role={user?.role || 'user'} />
+              {user?.username?.toLowerCase() !== user?.role?.toLowerCase() && (
+                <RoleBadge role={user?.role || 'user'} />
+              )}
             </div>
           )}
         </div>

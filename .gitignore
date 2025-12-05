@@ -5,3 +5,4 @@ credential.json
 .env
 .cache/
 .thumbnail/
+/assets/

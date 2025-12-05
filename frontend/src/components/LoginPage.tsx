@@ -1,6 +1,6 @@
 import { useState, useActionState } from 'react';
 import { motion } from 'framer-motion';
-import { FolderOpen, Lock, User, AlertCircle, ArrowRight } from 'lucide-react';
+import { Lock, User, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../store';
 import Input from './Input';
 import Button from './Button';
@@ -41,9 +41,7 @@ export default function LoginPage() {
         <div>
           {/* Logo */}
           <div className="flex items-center gap-3 mb-16">
-            <div className="w-10 h-10 bg-primary flex items-center justify-center">
-              <FolderOpen className="w-6 h-6 text-white" />
-            </div>
+            <img src="/sfm-logo.png" alt="SFM Logo" className="w-10 h-10 object-contain" />
             <span className="text-xl font-semibold text-inverse">
               Simple File Manager
             </span>
@@ -98,9 +96,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Mobile Logo */}
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <div className="w-10 h-10 bg-primary flex items-center justify-center">
-              <FolderOpen className="w-6 h-6 text-white" />
-            </div>
+            <img src="/sfm-logo.png" alt="SFM Logo" className="w-10 h-10 object-contain" />
             <span className="text-xl font-semibold text-foreground">
               Simple File Manager
             </span>
