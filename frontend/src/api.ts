@@ -23,6 +23,32 @@ const api = axios.create({
   },
 });
 
+// Global callback for handling authentication errors
+let onAuthError: (() => void) | null = null;
+
+// Export function to register auth error handler
+export function setAuthErrorHandler(handler: () => void) {
+  onAuthError = handler;
+}
+
+// Response interceptor to handle 401 errors
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    // If we get a 401 (Unauthorized), trigger the auth error handler
+    if (error.response?.status === 401) {
+      // Don't show error message, just redirect to login
+      if (onAuthError) {
+        onAuthError();
+      }
+      // Return a rejected promise to prevent the error from propagating
+      return Promise.reject(error);
+    }
+    // For other errors, let them propagate normally
+    return Promise.reject(error);
+  }
+);
+
 // Error handler
 function handleError(error: unknown): never {
   if (error instanceof AxiosError) {
@@ -265,12 +291,16 @@ export async function searchFiles(
   page: number = 1,
   limit: number = 50,
   showHidden: boolean = false,
-  tenantId?: string | null
+  tenantId?: string | null,
+  searchPath?: string
 ): Promise<SearchResponse> {
   try {
     const params: Record<string, any> = { q: query, regex, page, limit, showHidden };
-    if (tenantId) {
+    if (tenantId !== undefined && tenantId !== null) {
       params.tenantId = tenantId;
+    }
+    if (searchPath !== undefined) {
+      params.path = searchPath;
     }
     const { data } = await api.get<SearchResponse>('/search', { params });
     return data;

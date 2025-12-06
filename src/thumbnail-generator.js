@@ -56,45 +56,57 @@ export function isImageFile(filename) {
 
 /**
  * Get the thumbnail path for a given file path
- * @param {string} relativePath - Relative path to the original file
+ * @param {string} relativePath - Relative path to the original file (from tenant base or uploads base)
+ * @param {string} tenantId - Optional tenant ID to include in thumbnail path
  * @returns {string} Path to the thumbnail file
  */
-export function getThumbnailPath(relativePath) {
+export function getThumbnailPath(relativePath, tenantId = null) {
   const dir = path.dirname(relativePath);
   const basename = path.basename(relativePath, path.extname(relativePath));
   const thumbnailName = `${basename}.${THUMBNAIL_FORMAT}`;
-  return path.join(dir, thumbnailName);
+  const thumbnailRelPath = path.join(dir, thumbnailName);
+  
+  // If tenantId is provided, prepend it to the thumbnail path
+  if (tenantId) {
+    return path.join(tenantId, thumbnailRelPath);
+  }
+  
+  return thumbnailRelPath;
 }
 
 /**
  * Get the full thumbnail filesystem path
- * @param {string} relativePath - Relative path to the original file
+ * @param {string} relativePath - Relative path to the original file (from tenant base or uploads base)
+ * @param {string} tenantId - Optional tenant ID to include in thumbnail path
  * @returns {string} Full filesystem path to the thumbnail
  */
-export function getThumbnailFullPath(relativePath) {
-  const thumbnailRelPath = getThumbnailPath(relativePath);
+export function getThumbnailFullPath(relativePath, tenantId = null) {
+  const thumbnailRelPath = getThumbnailPath(relativePath, tenantId);
   return path.join(thumbnailBasePath, thumbnailRelPath);
 }
 
 /**
  * Get the thumbnail URL for a file
- * @param {string} relativePath - Relative path to the original file
+ * @param {string} relativePath - Relative path to the original file (from tenant base or uploads base)
+ * @param {string} tenantId - Optional tenant ID to include in thumbnail URL
  * @returns {string|null} URL path or null if not an image
  */
-export function getThumbnailUrl(relativePath) {
+export function getThumbnailUrl(relativePath, tenantId = null) {
   if (!isImageFile(relativePath)) {
     return null;
   }
-  const thumbnailRelPath = getThumbnailPath(relativePath);
+  const thumbnailRelPath = getThumbnailPath(relativePath, tenantId);
   return `/thumb/${thumbnailRelPath}`;
 }
 
 /**
  * Generate a thumbnail for an image
- * @param {string} relativePath - Relative path to the image in uploads
+ * @param {string} relativePath - Relative path to the image (from tenant base or uploads base)
+ * @param {string} tenantId - Optional tenant ID to include in thumbnail path
+ * @param {string} sourceFullPath - Optional full path to source file (if different from default)
  * @returns {Promise<boolean>} Success status
  */
-export async function generateThumbnail(relativePath) {
+export async function generateThumbnail(relativePath, tenantId = null, sourceFullPath = null) {
   if (!uploadsPath || !thumbnailBasePath) {
     console.warn('Thumbnail generator not initialized');
     return false;
@@ -104,8 +116,17 @@ export async function generateThumbnail(relativePath) {
     return false;
   }
   
-  const sourcePath = path.join(uploadsPath, relativePath);
-  const thumbnailPath = getThumbnailFullPath(relativePath);
+  // Determine source path: use provided path, or construct from tenantId + relativePath, or just relativePath
+  let sourcePath;
+  if (sourceFullPath) {
+    sourcePath = sourceFullPath;
+  } else if (tenantId) {
+    sourcePath = path.join(uploadsPath, tenantId, relativePath);
+  } else {
+    sourcePath = path.join(uploadsPath, relativePath);
+  }
+  
+  const thumbnailPath = getThumbnailFullPath(relativePath, tenantId);
   
   try {
     // Ensure thumbnail directory exists

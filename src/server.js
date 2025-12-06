@@ -163,17 +163,32 @@ const upload = multer({
 // Thumbnail serving middleware with access control
 app.use('/thumb', async (req, res, next) => {
   const decodedPath = decodeURIComponent(req.path);
-  const relativePath = decodedPath.startsWith('/') ? decodedPath.slice(1) : decodedPath;
+  let relativePath = decodedPath.startsWith('/') ? decodedPath.slice(1) : decodedPath;
   const thumbnailBasePath = thumbnailGenerator.getThumbnailBasePath();
   
   if (!thumbnailBasePath) {
     return res.status(503).json({ error: 'Thumbnail service not initialized' });
   }
   
-  const fullPath = path.join(thumbnailBasePath, relativePath);
+  // Extract tenantId from path if present (path format: tenantId/folder/file.webp)
+  let tenantId = null;
+  const pathParts = relativePath.split('/');
+  if (pathParts.length > 0) {
+    const firstPart = pathParts[0];
+    // Check if first part looks like a CUID (tenantId) - typically 25 chars
+    if (firstPart.length > 20 && firstPart.match(/^[a-z0-9]+$/)) {
+      tenantId = firstPart;
+      relativePath = pathParts.slice(1).join('/');
+    }
+  }
+  
+  const fullPath = tenantId 
+    ? path.join(thumbnailBasePath, tenantId, relativePath)
+    : path.join(thumbnailBasePath, relativePath);
   
   // Security check: prevent directory traversal
-  if (!fullPath.startsWith(thumbnailBasePath)) {
+  const expectedBase = tenantId ? path.join(thumbnailBasePath, tenantId) : thumbnailBasePath;
+  if (!fullPath.startsWith(expectedBase)) {
     return res.status(403).json({ error: 'Access denied' });
   }
   
@@ -193,10 +208,12 @@ app.use('/thumb', async (req, res, next) => {
   const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif', '.bmp'];
   
   for (const ext of imageExtensions) {
-    const possiblePath = thumbnailDir ? `${thumbnailDir}/${thumbnailBasename}${ext}` : `${thumbnailBasename}${ext}`;
-    const possibleFullPath = path.join(uploadsPath, possiblePath);
+    const possibleRelPath = thumbnailDir ? `${thumbnailDir}/${thumbnailBasename}${ext}` : `${thumbnailBasename}${ext}`;
+    const possibleFullPath = tenantId 
+      ? path.join(uploadsPath, tenantId, possibleRelPath)
+      : path.join(uploadsPath, possibleRelPath);
     if (existsSync(possibleFullPath)) {
-      originalRelativePath = possiblePath;
+      originalRelativePath = possibleRelPath;
       break;
     }
   }
@@ -208,6 +225,35 @@ app.use('/thumb', async (req, res, next) => {
       accessLevel = fileCache.getAccessLevel(originalRelativePath);
     } catch (e) {
       // Default to public if cache fails
+    }
+  }
+  
+  // If tenantId is specified, verify access
+  if (tenantId) {
+    let user = null;
+    
+    // Get user from session if available
+    if (req.session && req.session.user) {
+      user = req.session.user;
+    }
+    
+    // Check for API token in query parameter or header
+    if (!user && (req.query.apiKey || req.query.api_key || req.headers.authorization)) {
+      let apiKey = req.query.apiKey || req.query.api_key;
+      if (!apiKey && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+        apiKey = req.headers.authorization.substring(7);
+      }
+      if (apiKey) {
+        try {
+          user = await credentialsManager.getUserByApiKey(apiKey);
+        } catch (e) {
+          // Ignore auth errors
+        }
+      }
+    }
+    
+    if (user && !(await verifyTenantAccess(user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
     }
   }
   
@@ -1371,7 +1417,7 @@ app.get('/api/files', requireAuth, async (req, res) => {
         // Add thumbnailUrl for image files
         const itemsWithThumbnails = items.map(item => ({
           ...item,
-          thumbnailUrl: !item.isDirectory ? thumbnailGenerator.getThumbnailUrl(item.path) : null
+          thumbnailUrl: !item.isDirectory ? thumbnailGenerator.getThumbnailUrl(item.path, tenantId || null) : null
         }));
         return res.json({
           currentPath: subPath,
@@ -1425,7 +1471,7 @@ app.get('/api/files', requireAuth, async (req, res) => {
             modified: stats.mtime,
             created: stats.birthtime,
             accessLevel,
-            thumbnailUrl: !isDir ? thumbnailGenerator.getThumbnailUrl(relativePath) : null
+            thumbnailUrl: !isDir ? thumbnailGenerator.getThumbnailUrl(relativePath, tenantId || null) : null
           };
         })
     );
@@ -1551,7 +1597,7 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       
       // Generate thumbnail for images (non-blocking)
       if (thumbnailGenerator.isImageFile(file.originalname)) {
-        thumbnailGenerator.generateThumbnail(fileRelativePath).catch(err => {
+        thumbnailGenerator.generateThumbnail(fileRelativePath, tenantId || null).catch(err => {
           console.warn('Thumbnail generation failed for:', fileRelativePath, err.message);
         });
       }
@@ -2330,7 +2376,7 @@ app.post('/api/access-level', requireAuth, async (req, res) => {
   }
 });
 
-// Search files with pagination
+// Search files with pagination (tenant-aware)
 app.get('/api/search', requireAuth, async (req, res) => {
   try {
     const query = req.query.q || '';
@@ -2338,6 +2384,47 @@ app.get('/api/search', requireAuth, async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
     const showHidden = req.query.showHidden === 'true';
+    
+    // Get tenantId from query or user's tenant
+    let tenantId = req.query.tenantId || req.tenantId;
+    
+    // For tenant users, enforce their tenant
+    if (req.user.tenantId && req.user.role !== 'super_admin') {
+      tenantId = req.user.tenantId;
+    }
+    
+    // Get search path (optional - if provided, search only within this path)
+    const searchPath = req.query.path || '';
+    
+    // Verify tenant access
+    if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
+      return res.status(403).json({ error: 'Access denied to this tenant' });
+    }
+    
+    // Determine the base path for searching
+    // If tenantId is provided, search within that tenant's directory
+    // If searchPath is provided, search from that path within the tenant
+    let searchBasePath;
+    let tenantRootPath; // For calculating relative paths
+    
+    if (tenantId) {
+      // Search within a specific tenant
+      const tenantRoot = path.join(uploadsPath, tenantId);
+      const fullPath = resolveTenantFilePath(tenantId, searchPath, uploadsPath);
+      
+      // Security check: prevent directory traversal
+      if (!fullPath.startsWith(tenantRoot)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      searchBasePath = fullPath;
+      tenantRootPath = tenantRoot; // Use tenant root for relative path calculation
+    } else {
+      // Super admin searching across all tenants (legacy - not recommended)
+      // Search from uploads root
+      searchBasePath = resolveTenantFilePath(null, searchPath, uploadsPath);
+      tenantRootPath = uploadsPath; // Use uploads root for relative path calculation
+    }
     
     // Validate regex if enabled
     let regexPattern;
@@ -2351,15 +2438,15 @@ app.get('/api/search', requireAuth, async (req, res) => {
       }
     }
     
-    // Try cache first for non-regex searches
-    if (fileCache.isReady() && !useRegex) {
+    // Try cache first for non-regex searches (skip if tenant-specific as cache may not be tenant-aware)
+    if (fileCache.isReady() && !useRegex && !tenantId) {
       try {
         const cacheResult = fileCache.searchFiles(query, useRegex, page, limit, showHidden);
         if (cacheResult) {
           // Add thumbnailUrl for image files
           const resultsWithThumbnails = cacheResult.results.map(item => ({
             ...item,
-            thumbnailUrl: !item.isDirectory ? thumbnailGenerator.getThumbnailUrl(item.path) : null
+            thumbnailUrl: !item.isDirectory ? thumbnailGenerator.getThumbnailUrl(item.path, tenantId || null) : null
           }));
           return res.json({
             results: resultsWithThumbnails,
@@ -2378,64 +2465,74 @@ app.get('/api/search', requireAuth, async (req, res) => {
       }
     }
     
-    // Filesystem fallback (always used for regex)
+    // Filesystem search (always used for tenant-specific searches or regex)
     const results = [];
     
     async function searchDir(dirPath) {
-      const items = await fs.readdir(dirPath, { withFileTypes: true });
-      
-      for (const item of items) {
-        // Skip symlinks
-        if (item.isSymbolicLink()) continue;
+      try {
+        const items = await fs.readdir(dirPath, { withFileTypes: true });
         
-        // Skip hidden files if not showing them
-        if (!showHidden && item.name.startsWith('.')) continue;
-        
-        const fullPath = path.join(dirPath, item.name);
-        const relativePath = path.relative(searchBasePath, fullPath);
-        
-        // Check if filename matches
-        let matches = false;
-        if (useRegex) {
-          matches = regexPattern.test(item.name);
-        } else {
-          matches = item.name.toLowerCase().includes(query.toLowerCase());
-        }
-        
-        if (matches) {
-          const stats = await fs.stat(fullPath);
+        for (const item of items) {
+          // Skip symlinks
+          if (item.isSymbolicLink()) continue;
           
-          // Get access level from cache if available
-          let accessLevel = 'public';
-          if (fileCache.isReady()) {
-            try {
-              const fileInfo = fileCache.getFileInfo(relativePath);
-              if (fileInfo) {
-                accessLevel = fileInfo.accessLevel;
-              }
-            } catch (e) {
-              // Default to public if cache fails
-            }
+          // Skip hidden files if not showing them
+          if (!showHidden && item.name.startsWith('.')) continue;
+          
+          const fullPath = path.join(dirPath, item.name);
+          // Calculate relative path from tenant root (or uploads root if no tenant)
+          const relativePath = path.relative(tenantRootPath, fullPath);
+          
+          // Check if filename matches
+          let matches = false;
+          if (useRegex) {
+            matches = regexPattern.test(item.name);
+          } else {
+            matches = item.name.toLowerCase().includes(query.toLowerCase());
           }
           
-          const isDir = item.isDirectory();
-          results.push({
-            name: item.name,
-            path: relativePath,
-            isDirectory: isDir,
-            size: stats.size,
-            modified: stats.mtime,
-            accessLevel,
-            thumbnailUrl: !isDir ? thumbnailGenerator.getThumbnailUrl(relativePath) : null
-          });
+          if (matches) {
+            const stats = await fs.stat(fullPath);
+            
+            // Get access level from cache if available
+            let accessLevel = 'public';
+            if (fileCache.isReady()) {
+              try {
+                const fileInfo = fileCache.getFileInfo(relativePath);
+                if (fileInfo) {
+                  accessLevel = fileInfo.accessLevel;
+                }
+              } catch (e) {
+                // Default to public if cache fails
+              }
+            }
+            
+            const isDir = item.isDirectory();
+            results.push({
+              name: item.name,
+              path: relativePath,
+              isDirectory: isDir,
+              size: stats.size,
+              modified: stats.mtime,
+              accessLevel,
+              thumbnailUrl: !isDir ? thumbnailGenerator.getThumbnailUrl(relativePath, tenantId || null) : null
+            });
+          }
+          
+          // Continue searching in subdirectories
+          if (item.isDirectory()) {
+            await searchDir(fullPath);
+          }
         }
-        
-        if (item.isDirectory()) {
-          await searchDir(fullPath);
+      } catch (error) {
+        // Ignore permission errors for individual directories
+        if (error.code !== 'EACCES' && error.code !== 'EPERM') {
+          console.error(`Error reading directory ${dirPath}:`, error.message);
         }
       }
     }
     
+    // Start searching from the base path
     await searchDir(searchBasePath);
     
     // Sort results: directories first, then by name

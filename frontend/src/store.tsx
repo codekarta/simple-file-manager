@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useCallback, useEffect, useOptimistic, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useOptimistic, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { User, FileItem, Pagination, StorageInfo, ModalType } from './types';
 import * as api from './api';
+import { setAuthErrorHandler } from './api';
 import { getStorageItem, setStorageItem } from './utils';
 
 // ===== App State Context =====
@@ -213,7 +214,76 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadFiles = useCallback(async (path?: string, page?: number, tenantIdOverride?: string | null) => {
     try {
       setIsLoading(true);
-      const targetPath = path ?? currentPath;
+      let targetPath = path ?? currentPath;
+      
+      // Handle special "all-files" marker path - show tenant root folders only
+      if (targetPath === '__all_files__' || targetPath === 'all-files') {
+        targetPath = 'all-files';
+        
+        // Only show tenant folders for super admin
+        if (user?.role === 'super_admin') {
+          try {
+            // Get all tenants and show them as folders
+            const tenants = await api.listTenants();
+            
+            // Transform tenants to FileItem format with tenant names
+            const tenantFolders: FileItem[] = tenants.map(tenant => ({
+              name: tenant.name, // Use tenant name instead of ID
+              path: tenant.tenantId, // Store tenantId in path for navigation
+              isDirectory: true,
+              size: 0,
+              modified: tenant.createdAt,
+              created: tenant.createdAt,
+              accessLevel: 'public' as const,
+              thumbnailUrl: null,
+              isTenant: false, // Not marked as tenant so it behaves like a regular folder
+              tenantId: tenant.tenantId,
+              tenantName: tenant.name,
+            }));
+            
+            // Sort by tenant name
+            tenantFolders.sort((a, b) => 
+              (a.tenantName || '').localeCompare(b.tenantName || '')
+            );
+            
+            // Apply pagination
+            const total = tenantFolders.length;
+            const currentPage = page || 1;
+            const offset = (currentPage - 1) * itemsPerPage;
+            const paginatedFolders = tenantFolders.slice(offset, offset + itemsPerPage);
+            
+            setFiles(paginatedFolders);
+            setPagination({
+              page: currentPage,
+              limit: itemsPerPage,
+              total,
+              totalPages: Math.ceil(total / itemsPerPage),
+              hasNext: offset + itemsPerPage < total,
+              hasPrev: currentPage > 1,
+            });
+            setCurrentPath('all-files');
+            setSelectedFiles(new Set());
+            setSearchQuery('');
+            setIsLoading(false);
+            return;
+          } catch (error) {
+            if (error instanceof Error) {
+              showToast(error.message, 'error');
+            }
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          // Non-super admin - show empty
+          setFiles([]);
+          setPagination(null);
+          setCurrentPath('all-files');
+          setSelectedFiles(new Set());
+          setSearchQuery('');
+          setIsLoading(false);
+          return;
+        }
+      }
       
       // Determine tenantId: use override if provided, otherwise currentTenantId, or user's tenantId, or null for super admin
       let tenantId: string | null = tenantIdOverride !== undefined ? tenantIdOverride : currentTenantId;
@@ -253,10 +323,206 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       setIsSearching(true);
       
-      // Determine tenantId
+      // Check if we're on "all-files" view - search across all tenants
+      const isOnAllFilesView = currentPath === 'all-files' && user?.role === 'super_admin';
+      
+      if (isOnAllFilesView) {
+        // Search across all tenants' files and folders
+        const tenants = await api.listTenants();
+        const useRegex = regex ?? isRegexSearch;
+        
+        // Search files in each tenant
+        const searchPromises = tenants.map(async (tenant) => {
+          try {
+            // Search from root of each tenant (empty path means search from tenant root)
+            const searchResponse = await api.searchFiles(
+              query,
+              useRegex,
+              1,
+              1000, // Get all matching files from each tenant
+              showHiddenFiles,
+              tenant.tenantId,
+              '' // Search from tenant root, not a specific subfolder
+            );
+            
+            // Return empty array if no results (only show tenants where files actually exist)
+            if (!searchResponse.results || searchResponse.results.length === 0) {
+              return [];
+            }
+            
+            // Deduplicate results within this tenant's search results
+            const seenInTenant = new Map<string, FileItem>();
+            searchResponse.results.forEach((file) => {
+              // Use file path as unique key (since path should be unique within a tenant)
+              // Normalize the path to handle edge cases
+              const normalizedPath = (file.path || '').trim();
+              const uniqueKey = normalizedPath || `${file.name}_${file.isDirectory ? 'dir' : 'file'}`;
+              
+              // Only add if we haven't seen this path before
+              if (!seenInTenant.has(uniqueKey)) {
+                seenInTenant.set(uniqueKey, file);
+              }
+            });
+            
+            // Convert deduplicated results and add tenant info
+            return Array.from(seenInTenant.values()).map((file) => ({
+              ...file,
+              tenantId: tenant.tenantId,
+              tenantName: tenant.name,
+              // Prefix file/folder name with tenant name for display
+              name: `${tenant.name}/${file.name}`,
+              // Store original path with tenant context (format: "tenantId:filePath")
+              path: `${tenant.tenantId}:${file.path}`,
+            }));
+          } catch (error) {
+            console.error(`Error searching in tenant ${tenant.name}:`, error);
+            return [];
+          }
+        });
+        
+        const allResultsArrays = await Promise.all(searchPromises);
+        const allResults = allResultsArrays.flat();
+        
+        // Deduplicate results to ensure each file appears only once per tenant
+        // Use a combination of tenantId and file path to create unique keys
+        const uniqueResultsMap = new Map<string, FileItem>();
+        
+        allResults.forEach((file) => {
+          // Extract the original file path (before we added tenant prefix)
+          // The path format after transformation is: "tenantId:originalPath"
+          let originalPath = file.path || '';
+          if (file.path && file.path.includes(':')) {
+            const parts = file.path.split(':');
+            originalPath = parts.slice(1).join(':') || parts[1] || '';
+          }
+          
+          // Extract original name (remove tenant prefix from display name)
+          // Display name format is: "TenantName/FileName"
+          let originalName = file.name || '';
+          if (file.name && file.name.includes('/')) {
+            const parts = file.name.split('/');
+            originalName = parts.slice(1).join('/') || parts[1] || '';
+          }
+          
+          // Create a unique key: tenantId + normalized file path
+          // This ensures same file from same tenant only appears once
+          // Use path if available, otherwise use name
+          const fileIdentifier = originalPath || originalName || file.name || '';
+          const normalizedIdentifier = fileIdentifier.trim().toLowerCase();
+          const uniqueKey = `${file.tenantId || 'unknown'}:${normalizedIdentifier}`;
+          
+          // Only keep the first occurrence of this tenant+file combination
+          // This prevents duplicates even if search returns same file multiple times
+          if (!uniqueResultsMap.has(uniqueKey)) {
+            uniqueResultsMap.set(uniqueKey, file);
+          }
+        });
+        
+        // Convert map back to array (this gives us deduplicated results)
+        const uniqueResults = Array.from(uniqueResultsMap.values());
+        
+        // Sort results: directories first, then by tenant name, then by file name
+        uniqueResults.sort((a, b) => {
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          if (a.tenantName !== b.tenantName) {
+            return (a.tenantName || '').localeCompare(b.tenantName || '');
+          }
+          // Compare by original file name (without tenant prefix) for proper sorting
+          const aOriginalName = a.name.includes('/') ? a.name.split('/').pop() || a.name : a.name;
+          const bOriginalName = b.name.includes('/') ? b.name.split('/').pop() || b.name : b.name;
+          return aOriginalName.toLowerCase().localeCompare(bOriginalName.toLowerCase());
+        });
+        
+        // Apply pagination
+        const total = uniqueResults.length;
+        const currentPage = 1;
+        const offset = 0;
+        const paginatedResults = uniqueResults.slice(offset, offset + itemsPerPage);
+        
+        setFiles(paginatedResults);
+        setPagination({
+          page: currentPage,
+          limit: itemsPerPage,
+          total,
+          totalPages: Math.ceil(total / itemsPerPage),
+          hasNext: offset + itemsPerPage < total,
+          hasPrev: false,
+        });
+        setSelectedFiles(new Set());
+        return;
+      }
+      
+      // Check if we're on tenants list page (super admin viewing tenants)
+      // We check files to see if we're currently viewing tenant folders
+      const isOnTenantsList = user?.role === 'super_admin' && 
+                               !currentTenantId && 
+                               currentPath === '' && 
+                               files.length > 0 &&
+                               files.some(f => f.isTenant);
+      
+      if (isOnTenantsList) {
+        // Search/filter tenants client-side
+        const allTenants = await api.listTenants();
+        const searchTerm = query.toLowerCase();
+        const useRegex = regex ?? isRegexSearch;
+        const filteredTenants = allTenants.filter(tenant => {
+          if (useRegex) {
+            try {
+              const regexPattern = new RegExp(query, 'i');
+              return regexPattern.test(tenant.name) || regexPattern.test(tenant.tenantId);
+            } catch {
+              // Invalid regex, fall back to simple search
+              return tenant.name.toLowerCase().includes(searchTerm) || 
+                     tenant.tenantId.toLowerCase().includes(searchTerm);
+            }
+          }
+          return tenant.name.toLowerCase().includes(searchTerm) || 
+                 tenant.tenantId.toLowerCase().includes(searchTerm);
+        });
+        
+        // Convert tenants to FileItem format
+        const tenantItems: FileItem[] = filteredTenants.map(tenant => ({
+          name: tenant.name,
+          path: tenant.tenantId,
+          isDirectory: true,
+          size: 0,
+          modified: tenant.createdAt,
+          created: tenant.createdAt,
+          accessLevel: 'public' as const,
+          thumbnailUrl: null,
+          isTenant: true
+        }));
+        
+        setFiles(tenantItems);
+        setPagination({
+          page: 1,
+          limit: tenantItems.length,
+          total: tenantItems.length,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false
+        });
+        setSelectedFiles(new Set());
+        return;
+      }
+      
+      // Determine tenantId - enforce tenant scope for tenant users
       let tenantId: string | null = currentTenantId;
-      if (!tenantId && user?.tenantId) {
+      
+      // For tenant users, always enforce their tenant (search scoped to their tenant only)
+      if (user?.tenantId && user?.role !== 'super_admin') {
         tenantId = user.tenantId;
+      } else if (!tenantId && user?.tenantId) {
+        tenantId = user.tenantId;
+      }
+      
+      // Determine search path - if we're inside a tenant folder, search only within current path and its children
+      // Don't search from path if we're in "all-files" view (already handled above)
+      let searchPath = '';
+      if (currentPath && currentPath !== 'all-files' && tenantId) {
+        // When inside a tenant folder, search only within current path (scoped search)
+        searchPath = currentPath;
       }
       
       const response = await api.searchFiles(
@@ -265,7 +531,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         1,
         itemsPerPage,
         showHiddenFiles,
-        tenantId
+        tenantId,
+        searchPath
       );
       setFiles(response.results);
       setPagination(response.pagination);
@@ -277,7 +544,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSearching(false);
     }
-  }, [currentPath, isRegexSearch, itemsPerPage, showHiddenFiles, loadFiles, currentTenantId, user]);
+  }, [currentPath, isRegexSearch, itemsPerPage, showHiddenFiles, loadFiles, currentTenantId, user, files]);
 
   // Selection functions
   const selectFile = useCallback((path: string) => {
@@ -365,6 +632,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     checkAuth();
   }, [checkAuth]);
 
+  // Register auth error handler for 401 responses
+  useEffect(() => {
+    setAuthErrorHandler(() => {
+      // When session expires, just set authenticated to false to show login page
+      setIsAuthenticated(false);
+      setUser(null);
+    });
+  }, []);
+
   // Load files when authenticated (only once)
   useEffect(() => {
     if (isAuthenticated && !initialLoadDone.current) {
@@ -378,7 +654,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [isAuthenticated, loadFiles, refreshStorageInfo]);
 
-  const value: AppContextValue = {
+  const value: AppContextValue = useMemo(() => ({
     // Auth
     isAuthenticated,
     user,
@@ -446,7 +722,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     openFile,
     openEditor,
     closeEditor,
-  };
+  }), [
+    isAuthenticated, user, isLoading, login, logout, checkAuth, refreshUser,
+    currentTenantId, setCurrentTenantIdWithStorage,
+    currentPath, files, pagination, selectedFiles, setCurrentPath, loadFiles, searchFilesHandler,
+    selectFile, deselectFile, toggleFileSelection, selectAllFiles, clearSelection, isFileSelected,
+    optimisticFiles, deleteFileOptimistic,
+    storageInfo, refreshStorageInfo,
+    viewMode, setViewMode, showHiddenFiles, setShowHiddenFiles, sidebarCollapsed, setSidebarCollapsed, itemsPerPage, setItemsPerPage,
+    searchQuery, setSearchQuery, isRegexSearch, setIsRegexSearch, isSearching,
+    activeModal, modalData, openModal, closeModal,
+    showToast, toast,
+    openFile, openEditor, closeEditor,
+  ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

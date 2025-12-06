@@ -24,6 +24,8 @@ export interface FileItem {
   accessLevel: 'public' | 'private';
   thumbnailUrl: string | null;
   isTenant?: boolean; // Mark tenant folders
+  tenantId?: string | null; // Tenant ID for cross-tenant views
+  tenantName?: string | null; // Tenant name for display
 }
 
 export interface Pagination {

@@ -1,3 +1,4 @@
+import { memo, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home,
@@ -24,67 +25,100 @@ interface SidebarProps {
   onMobileClose?: () => void;
 }
 
-export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
+function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
   const { user, logout } = useAuth();
-  const { currentPath, loadFiles, setCurrentTenantId } = useApp();
+  const { currentPath, loadFiles, setCurrentTenantId, currentTenantId } = useApp();
   const { sidebarCollapsed, setSidebarCollapsed } = useUI();
   const { openModal } = useModal();
 
-  const isAdmin = user?.role === 'super_admin' || user?.role === 'tenant_admin';
-  const isSuperAdmin = user?.role === 'super_admin';
+  const isAdmin = useMemo(() => user?.role === 'super_admin' || user?.role === 'tenant_admin', [user?.role]);
+  const isSuperAdmin = useMemo(() => user?.role === 'super_admin', [user?.role]);
 
-  const handleNavigation = (path: string) => {
-    loadFiles(path);
+  const handleNavigation = useCallback((path: string) => {
+    // Handle "All Files" path for super admin
+    if (isSuperAdmin && path === 'all-files') {
+      // Load files from root but with a marker to skip tenant list
+      setCurrentTenantId(null);
+      loadFiles('__all_files__');
+      onMobileClose?.();
+      return;
+    }
+    // For super admin at home, reset tenant to clear files and show dashboard
+    if (isSuperAdmin && path === '' && !currentTenantId) {
+      setCurrentTenantId(null); // This will clear files and reset path
+    } else {
+      loadFiles(path);
+    }
     onMobileClose?.();
-  };
+  }, [isSuperAdmin, currentTenantId, setCurrentTenantId, loadFiles, onMobileClose]);
 
-  const handleOpenModal = (type: 'about' | 'user' | 'settings' | 'admin') => {
+  const handleOpenModal = useCallback((type: 'about' | 'user' | 'settings' | 'admin') => {
     openModal(type);
     onMobileClose?.();
-  };
+  }, [openModal, onMobileClose]);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await logout();
     onMobileClose?.();
-  };
+  }, [logout, onMobileClose]);
 
-  const navItems = [
-    { icon: Home, label: 'Home', path: '', active: currentPath === '' },
-    ...(isSuperAdmin ? [] : [{ icon: Files, label: 'All Files', path: '', active: false }]),
-  ];
+  const navItems = useMemo(() => [
+    { icon: Home, label: 'Home', path: '', active: currentPath === '' && !currentTenantId },
+    ...(isSuperAdmin ? [{ icon: Files, label: 'All Files', path: 'all-files', active: currentPath === 'all-files' }] : [{ icon: Files, label: 'All Files', path: '', active: false }]),
+  ], [currentPath, isSuperAdmin, currentTenantId]);
 
-  const utilityItems = [
+  const handleAboutClick = useCallback(() => {
+    handleOpenModal('about');
+  }, [handleOpenModal]);
+
+  const utilityItems = useMemo(() => [
     { icon: Book, label: 'API Docs', href: '/api-docs', external: true },
-    { icon: Info, label: 'About', onClick: () => handleOpenModal('about') },
-  ];
+    { icon: Info, label: 'About', onClick: handleAboutClick },
+  ], [handleAboutClick]);
 
-  const handleListTenants = () => {
+  const handleListTenants = useCallback(() => {
     // Navigate to root to show all tenant folders
     setCurrentTenantId(null);
     loadFiles('');
     onMobileClose?.();
-  };
+  }, [setCurrentTenantId, loadFiles, onMobileClose]);
 
-  const tenantItems = isSuperAdmin
+  const handleCreateTenant = useCallback(() => {
+    openModal('tenantCreate');
+  }, [openModal]);
+
+  const tenantItems = useMemo(() => isSuperAdmin
     ? [
         { icon: List, label: 'List Tenants', onClick: handleListTenants },
-        { icon: Plus, label: 'Create Tenant', onClick: () => openModal('tenantCreate') },
+        { icon: Plus, label: 'Create Tenant', onClick: handleCreateTenant },
       ]
-    : [];
+    : [], [isSuperAdmin, handleListTenants, handleCreateTenant]);
 
-  const settingsItems = [
-    { icon: Key, label: 'API Token', onClick: () => handleOpenModal('user') },
+  const handleApiTokenClick = useCallback(() => {
+    handleOpenModal('user');
+  }, [handleOpenModal]);
+
+  const handleUsersClick = useCallback(() => {
+    handleOpenModal('admin');
+  }, [handleOpenModal]);
+
+  const handleSettingsClick = useCallback(() => {
+    handleOpenModal('settings');
+  }, [handleOpenModal]);
+
+  const settingsItems = useMemo(() => [
+    { icon: Key, label: 'API Token', onClick: handleApiTokenClick },
     ...(isAdmin
       ? [
-          { icon: Users, label: 'Users', onClick: () => handleOpenModal('admin') },
+          { icon: Users, label: 'Users', onClick: handleUsersClick },
         ]
       : []),
     ...(isSuperAdmin
       ? [
-          { icon: Settings, label: 'Settings', onClick: () => handleOpenModal('settings') },
+          { icon: Settings, label: 'Settings', onClick: handleSettingsClick },
         ]
       : []),
-  ];
+  ], [isAdmin, isSuperAdmin, handleApiTokenClick, handleUsersClick, handleSettingsClick]);
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
@@ -367,3 +401,5 @@ export default function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
     </>
   );
 }
+
+export default memo(Sidebar);

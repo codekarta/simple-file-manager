@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Menu,
@@ -16,7 +16,7 @@ import {
   RefreshCw,
   Play,
 } from 'lucide-react';
-import { useFiles, useUI, useModal, useStorage } from '../store';
+import { useFiles, useUI, useModal, useStorage, useApp } from '../store';
 import Button from './Button';
 import Breadcrumb from './Breadcrumb';
 import Tooltip from './Tooltip';
@@ -26,8 +26,8 @@ interface HeaderProps {
   onMenuClick: () => void;
 }
 
-export default function Header({ onMenuClick }: HeaderProps) {
-  const { selectedFiles, clearSelection, loadFiles, currentPath, searchFiles } = useFiles();
+function Header({ onMenuClick }: HeaderProps) {
+  const { selectedFiles, clearSelection, loadFiles, currentPath, searchFiles, optimisticFiles } = useFiles();
   const {
     viewMode,
     setViewMode,
@@ -41,11 +41,18 @@ export default function Header({ onMenuClick }: HeaderProps) {
   } = useUI();
   const { openModal } = useModal();
   const { storageInfo, refreshStorageInfo } = useStorage();
+  const { user, currentTenantId } = useApp();
 
   const [showSearch, setShowSearch] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const hasSelection = selectedFiles.size > 0;
+  
+  // Detect if we're on tenants list page
+  const isOnTenantsList = user?.role === 'super_admin' && 
+                          !currentTenantId && 
+                          currentPath === '' && 
+                          optimisticFiles.some(f => f.isTenant);
 
   // Debounced search
   const debouncedSearch = debounce((query: string) => {
@@ -232,7 +239,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  placeholder="Search files..."
+                  placeholder={isOnTenantsList ? "Search tenants..." : "Search files..."}
                   className="w-full h-8 pl-8 pr-3 text-sm bg-surface border border-border focus:border-primary focus:outline-none"
                   autoFocus
                 />
@@ -280,32 +287,36 @@ export default function Header({ onMenuClick }: HeaderProps) {
             />
           </Tooltip>
 
-          <Tooltip content="Play Slideshow" position="bottom">
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<Play className="w-4 h-4" />}
-              onClick={() => openModal('slideshow')}
-            />
-          </Tooltip>
-          
-          <Tooltip content={showHiddenFiles ? 'Hide hidden files' : 'Show hidden files'} position="bottom">
-            <button
-              onClick={() => setShowHiddenFiles(!showHiddenFiles)}
-              className={cn(
-                'p-2 transition-colors',
-                showHiddenFiles
-                  ? 'text-primary bg-primary-subtle'
-                  : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
-              )}
-            >
-              {showHiddenFiles ? (
-                <Eye className="w-4 h-4" />
-              ) : (
-                <EyeOff className="w-4 h-4" />
-              )}
-            </button>
-          </Tooltip>
+          {!isOnTenantsList && (
+            <>
+              <Tooltip content="Play Slideshow" position="bottom">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Play className="w-4 h-4" />}
+                  onClick={() => openModal('slideshow')}
+                />
+              </Tooltip>
+              
+              <Tooltip content={showHiddenFiles ? 'Hide hidden files' : 'Show hidden files'} position="bottom">
+                <button
+                  onClick={() => setShowHiddenFiles(!showHiddenFiles)}
+                  className={cn(
+                    'p-2 transition-colors',
+                    showHiddenFiles
+                      ? 'text-primary bg-primary-subtle'
+                      : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
+                  )}
+                >
+                  {showHiddenFiles ? (
+                    <Eye className="w-4 h-4" />
+                  ) : (
+                    <EyeOff className="w-4 h-4" />
+                  )}
+                </button>
+              </Tooltip>
+            </>
+          )}
 
           <div className="flex border border-border">
             <Tooltip content="Grid view" position="bottom">
@@ -340,3 +351,5 @@ export default function Header({ onMenuClick }: HeaderProps) {
     </header>
   );
 }
+
+export default memo(Header);

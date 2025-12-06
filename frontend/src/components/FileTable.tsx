@@ -36,16 +36,36 @@ export default function FileTable() {
     }
   };
 
+  // Helper to extract tenant info from all-files view paths (format: "tenantId:filePath")
+  const getTenantAndPath = (file: FileItem) => {
+    if (file.tenantId && file.path.includes(':')) {
+      const [, ...pathParts] = file.path.split(':');
+      return {
+        tenantId: file.tenantId,
+        actualPath: pathParts.join(':') || '',
+      };
+    }
+    return {
+      tenantId: currentTenantId || user?.tenantId || null,
+      actualPath: file.path,
+    };
+  };
+
   const handleFileClick = (file: FileItem) => {
+    const { tenantId, actualPath } = getTenantAndPath(file);
+    
     if (file.isDirectory) {
       // If it's a tenant folder (marked with isTenant), switch to that tenant
       if (file.isTenant && user?.role === 'super_admin') {
-        const tenantId = file.path; // file.path is the tenantId for tenant folders
-        setCurrentTenantId(tenantId);
-        // Pass tenantId directly to avoid race condition with state update
-        loadFiles('', 1, tenantId);
+        const folderTenantId = file.path; // file.path is the tenantId for tenant folders
+        setCurrentTenantId(folderTenantId);
+        loadFiles('', 1, folderTenantId);
+      } else if (file.tenantId && currentPath === 'all-files') {
+        // From all-files view, navigate into that tenant's root folder
+        setCurrentTenantId(file.tenantId);
+        loadFiles('', 1, file.tenantId);
       } else {
-        loadFiles(file.path);
+        loadFiles(actualPath);
       }
     } else if (isImageFile(file.name) || isVideoFile(file.name)) {
       // Open gallery/slideshow for images and videos
@@ -58,25 +78,18 @@ export default function FileTable() {
       }
     } else if (isTextFile(file.name)) {
       // For text files, open in integrated editor
-      openEditor(file.path, file.name);
+      openEditor(actualPath, file.name);
     } else {
       // For other file types, open in new tab with tenant context
-      let tenantId: string | null = currentTenantId;
-      if (!tenantId && user?.tenantId) {
-        tenantId = user.tenantId;
-      }
-      const fileUrl = api.getFileUrl(file.path, tenantId);
+      const fileUrl = api.getFileUrl(actualPath, tenantId);
       window.open(fileUrl, '_blank');
     }
   };
 
-  const handleDownload = (e: React.MouseEvent, path: string) => {
+  const handleDownload = (e: React.MouseEvent, file: FileItem) => {
     e.stopPropagation();
-    let tenantId: string | null = currentTenantId;
-    if (!tenantId && user?.tenantId) {
-      tenantId = user.tenantId;
-    }
-    window.location.href = api.getDownloadUrl(path, tenantId);
+    const { tenantId, actualPath } = getTenantAndPath(file);
+    window.location.href = api.getDownloadUrl(actualPath, tenantId);
   };
 
   const handleRename = (e: React.MouseEvent, file: FileItem) => {
@@ -192,7 +205,7 @@ export default function FileTable() {
                 isSelected={selectedFiles.has(file.path)}
                 onToggleSelect={() => toggleFileSelection(file.path)}
                 onClick={() => handleFileClick(file)}
-                onDownload={(e) => handleDownload(e, file.path)}
+                onDownload={(e) => handleDownload(e, file)}
                 onDuplicate={(e) => handleDuplicate(e, file)}
                 onMove={(e) => handleMove(e, file)}
                 onCopyLink={(e) => handleCopyLink(e, file)}

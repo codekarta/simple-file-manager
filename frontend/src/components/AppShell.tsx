@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useCallback, memo } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import FileExplorer from './FileExplorer';
@@ -19,29 +18,33 @@ import MoveModal from '../modals/MoveModal';
 import TenantModal from '../modals/TenantModal';
 import TenantUserModal from '../modals/TenantUserModal';
 
-export default function AppShell() {
+function AppShell() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleCloseMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen(false);
+  }, []);
+
+  const handleOpenMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen(true);
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface">
       {/* Sidebar */}
       <Sidebar
         isMobileOpen={isMobileMenuOpen}
-        onMobileClose={() => setIsMobileMenuOpen(false)}
+        onMobileClose={handleCloseMobileMenu}
       />
 
       {/* Main content */}
-      <motion.main
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="flex-1 flex flex-col min-w-0 overflow-hidden"
-      >
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
+        <Header onMenuClick={handleOpenMobileMenu} />
 
         {/* File Explorer */}
         <FileExplorer />
-      </motion.main>
+      </main>
 
       {/* Modals */}
       <UploadModal />
@@ -60,3 +63,5 @@ export default function AppShell() {
     </div>
   );
 }
+
+export default memo(AppShell);

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, CheckCircle, AlertCircle, File, Folder, Minimize2, Maximize2 } from 'lucide-react';
 import { useFiles, useUI, useStorage, useApp } from '../store';
@@ -24,7 +24,7 @@ interface UploadItem {
   relativePath?: string;
 }
 
-export default function FileExplorer() {
+function FileExplorer() {
   const { optimisticFiles, isLoading, currentPath, loadFiles } = useFiles();
   const { viewMode, searchQuery, showToast } = useUI();
   const { refreshStorageInfo } = useStorage();
@@ -39,6 +39,7 @@ export default function FileExplorer() {
   const isUploadingRef = useRef(false);
 
   const isEmpty = optimisticFiles.length === 0;
+  const hasTenantFolders = optimisticFiles.some(file => file.isTenant && file.isDirectory);
 
   // Generate unique ID
   const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -274,8 +275,8 @@ export default function FileExplorer() {
           fileName={openFile.name}
           onClose={closeEditor}
         />
-      ) : user?.role === 'super_admin' && !currentTenantId && currentPath === '' && !searchQuery ? (
-        // Show system resources dashboard for super admin at home
+      ) : user?.role === 'super_admin' && !currentTenantId && currentPath === '' && !searchQuery && !hasTenantFolders ? (
+        // Show system resources dashboard for super admin at home (when no tenant folders are loaded)
         <SystemResourcesDashboard />
       ) : isEmpty ? (
         <EmptyState
@@ -451,3 +452,5 @@ export default function FileExplorer() {
     </div>
   );
 }
+
+export default memo(FileExplorer);
