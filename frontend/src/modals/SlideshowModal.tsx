@@ -14,13 +14,15 @@ import {
   Maximize2,
   Minimize2,
 } from 'lucide-react';
-import { useFiles, useModal } from '../store';
+import { useFiles, useModal, useApp } from '../store';
 import { formatFileSize, formatDateTime, isImageFile, isVideoFile, cn } from '../utils';
+import * as api from '../api';
 import type { FileItem } from '../types';
 
 export default function SlideshowModal() {
   const { optimisticFiles } = useFiles();
   const { activeModal, closeModal, modalData } = useModal();
+  const { currentTenantId } = useApp();
 
   // Get initial index from modal data if provided
   const initialIndex = (modalData as { initialIndex?: number } | undefined)?.initialIndex ?? 0;
@@ -139,7 +141,7 @@ export default function SlideshowModal() {
           if (isVideo && videoRef.current) {
             // For videos, toggle video playback directly
             if (videoRef.current.paused) {
-              videoRef.current.play().catch(() => {});
+              videoRef.current.play().catch(() => { });
               setIsPlaying(true);
             } else {
               videoRef.current.pause();
@@ -209,14 +211,23 @@ export default function SlideshowModal() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Get image URL - encode path segments properly
+  // Get image URL using API utility for consistent behavior
   const getImageUrl = (file: FileItem) => {
-    // Encode each path segment individually to handle special characters
-    const encodedPath = file.path
-      .split('/')
-      .map(segment => encodeURIComponent(segment))
-      .join('/');
-    return `/${encodedPath}`;
+    // If it's a search result, the path might be different than expected
+    // We should rely on standard API URL generation
+    // Use file's tenantId if available (e.g. from search), otherwise use current context
+    const effectiveTenantId = file.tenantId || currentTenantId;
+
+    // For super admin search results, the path might be prefixed with "tenantId:" 
+    // We need to strip this prefix to get the actual file path
+    // Use regex to replace "tenantId:" pattern at the start of the string
+    let filePath = file.path;
+    if (file.tenantId) {
+      const prefixRegex = new RegExp(`^${file.tenantId}:`);
+      filePath = filePath.replace(prefixRegex, '');
+    }
+
+    return api.getFileUrl(filePath, effectiveTenantId);
   };
 
   if (!isOpen) return null;
@@ -451,33 +462,33 @@ export default function SlideshowModal() {
                 <span className="text-white font-medium truncate max-w-[200px] sm:max-w-[300px]" title={currentFile.name}>
                   {currentFile.name}
                 </span>
-                
+
                 <span className="text-white/20">|</span>
-                
+
                 {/* Size */}
                 <span className="flex items-center gap-1.5 text-white/70 whitespace-nowrap">
                   <HardDrive className="w-3.5 h-3.5 text-white/40" />
                   {formatFileSize(currentFile.size)}
                 </span>
-                
+
                 <span className="text-white/20 hidden sm:inline">|</span>
-                
+
                 {/* Type */}
                 <span className="hidden sm:flex items-center gap-1.5 text-white/70 whitespace-nowrap">
                   <FileType className="w-3.5 h-3.5 text-white/40" />
                   {currentFile.name.split('.').pop()?.toUpperCase()}
                 </span>
-                
+
                 <span className="text-white/20 hidden md:inline">|</span>
-                
+
                 {/* Date */}
                 <span className="hidden md:flex items-center gap-1.5 text-white/70 whitespace-nowrap">
                   <Calendar className="w-3.5 h-3.5 text-white/40" />
                   {formatDateTime(currentFile.modified)}
                 </span>
-                
+
                 <span className="text-white/20">|</span>
-                
+
                 {/* Access level */}
                 <span className={cn(
                   'px-2 py-0.5 text-xs font-medium whitespace-nowrap',
@@ -487,7 +498,7 @@ export default function SlideshowModal() {
                 )}>
                   {currentFile.accessLevel?.toUpperCase() || 'PUBLIC'}
                 </span>
-                
+
                 {/* Path - hidden on mobile */}
                 <span className="hidden lg:block text-xs text-white/40 font-mono truncate ml-auto" title={currentFile.path}>
                   /{currentFile.path}

@@ -41,7 +41,7 @@ export default function FileGrid() {
 
   const handleFileClick = (file: FileItem) => {
     const { tenantId, actualPath } = getTenantAndPath(file);
-    
+
     if (file.isDirectory) {
       // If it's a tenant folder (marked with isTenant), switch to that tenant
       if (file.isTenant && user?.role === 'super_admin') {
@@ -155,7 +155,7 @@ export default function FileGrid() {
             isSelected={selectedFiles.has(file.path)}
             onToggleSelect={() => toggleFileSelection(file.path)}
             onClick={() => handleFileClick(file)}
-            onDownload={() => handleDownload(file.path)}
+            onDownload={() => handleDownload(file)}
             onDuplicate={() => handleDuplicate(file)}
             onMove={() => handleMove(file)}
             onCopyLink={() => handleCopyLink(file)}

@@ -47,7 +47,7 @@ function resolveUploadPath(uploadDir) {
   let resolvedPath;
   let pathType;
   let isOutsideRoot = false;
-  
+
   // Handle tilde (~) expansion for home directory
   if (uploadDir.startsWith('~/') || uploadDir === '~') {
     resolvedPath = path.join(homedir(), uploadDir.slice(1));
@@ -66,12 +66,12 @@ function resolveUploadPath(uploadDir) {
     pathType = 'relative path';
     isOutsideRoot = false;
   }
-  
+
   console.log(`\n📂 Upload Directory Configuration:`);
   console.log(`   Type: ${pathType}`);
   console.log(`   Configured: ${uploadDir}`);
   console.log(`   Resolved: ${resolvedPath}`);
-  
+
   // Security check: prevent access outside root unless explicitly allowed
   if (isOutsideRoot && !ALLOW_EXTERNAL_UPLOAD_FOLDER) {
     console.error(`\n❌ SECURITY ERROR: Access outside application root is not allowed!`);
@@ -87,13 +87,13 @@ function resolveUploadPath(uploadDir) {
     console.error(`   External paths should have proper permissions and access controls.\n`);
     process.exit(1);
   }
-  
+
   if (isOutsideRoot && ALLOW_EXTERNAL_UPLOAD_FOLDER) {
     console.log(`   🔓 External access: Allowed (ALLOW_EXTERNAL_UPLOAD_FOLDER=true)`);
   } else {
     console.log(`   🔒 Location: Inside application root (secure)`);
   }
-  
+
   return resolvedPath;
 }
 
@@ -133,7 +133,7 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'default-secret-key',
   resave: true,
   saveUninitialized: false,
-  cookie: { 
+  cookie: {
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     httpOnly: true,
     secure: false,
@@ -152,9 +152,9 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage,
-  limits: { 
+  limits: {
     fileSize: 100 * 1024 * 1024, // 100MB per file
     files: 500
   }
@@ -165,11 +165,11 @@ app.use('/thumb', async (req, res, next) => {
   const decodedPath = decodeURIComponent(req.path);
   let relativePath = decodedPath.startsWith('/') ? decodedPath.slice(1) : decodedPath;
   const thumbnailBasePath = thumbnailGenerator.getThumbnailBasePath();
-  
+
   if (!thumbnailBasePath) {
     return res.status(503).json({ error: 'Thumbnail service not initialized' });
   }
-  
+
   // Extract tenantId from path if present (path format: tenantId/folder/file.webp)
   let tenantId = null;
   const pathParts = relativePath.split('/');
@@ -181,35 +181,35 @@ app.use('/thumb', async (req, res, next) => {
       relativePath = pathParts.slice(1).join('/');
     }
   }
-  
-  const fullPath = tenantId 
+
+  const fullPath = tenantId
     ? path.join(thumbnailBasePath, tenantId, relativePath)
     : path.join(thumbnailBasePath, relativePath);
-  
+
   // Security check: prevent directory traversal
   const expectedBase = tenantId ? path.join(thumbnailBasePath, tenantId) : thumbnailBasePath;
   if (!fullPath.startsWith(expectedBase)) {
     return res.status(403).json({ error: 'Access denied' });
   }
-  
+
   // Check if thumbnail exists
   if (!existsSync(fullPath)) {
     console.log(`Thumbnail not found: ${fullPath}`);
     return res.status(404).json({ error: 'Thumbnail not found', path: relativePath });
   }
-  
+
   // Find the original file path to check access level
   // Thumbnail is name.webp, need to find original (name.jpg, name.png, etc.)
   const thumbnailDir = path.dirname(relativePath);
   const thumbnailBasename = path.basename(relativePath, '.webp');
-  
+
   // Try to find the original file to check its access level
   let originalRelativePath = null;
   const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif', '.bmp'];
-  
+
   for (const ext of imageExtensions) {
     const possibleRelPath = thumbnailDir ? `${thumbnailDir}/${thumbnailBasename}${ext}` : `${thumbnailBasename}${ext}`;
-    const possibleFullPath = tenantId 
+    const possibleFullPath = tenantId
       ? path.join(uploadsPath, tenantId, possibleRelPath)
       : path.join(uploadsPath, possibleRelPath);
     if (existsSync(possibleFullPath)) {
@@ -217,7 +217,7 @@ app.use('/thumb', async (req, res, next) => {
       break;
     }
   }
-  
+
   // Check access level of original file (if found)
   let accessLevel = 'public';
   if (originalRelativePath && fileCache.isReady()) {
@@ -227,16 +227,16 @@ app.use('/thumb', async (req, res, next) => {
       // Default to public if cache fails
     }
   }
-  
+
   // If tenantId is specified, verify access
   if (tenantId) {
     let user = null;
-    
+
     // Get user from session if available
     if (req.session && req.session.user) {
       user = req.session.user;
     }
-    
+
     // Check for API token in query parameter or header
     if (!user && (req.query.apiKey || req.query.api_key || req.headers.authorization)) {
       let apiKey = req.query.apiKey || req.query.api_key;
@@ -251,21 +251,21 @@ app.use('/thumb', async (req, res, next) => {
         }
       }
     }
-    
+
     if (user && !(await verifyTenantAccess(user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
   }
-  
+
   // If private, check authentication
   if (accessLevel === 'private') {
     let isAuthenticated = false;
-    
+
     // Check session authentication
     if (req.session && req.session.authenticated) {
       isAuthenticated = true;
     }
-    
+
     // Check for API token in query parameter
     if (!isAuthenticated && (req.query.apiKey || req.query.api_key)) {
       const apiKey = req.query.apiKey || req.query.api_key;
@@ -278,7 +278,7 @@ app.use('/thumb', async (req, res, next) => {
         // Ignore auth errors
       }
     }
-    
+
     // Check for API token in Authorization header
     if (!isAuthenticated) {
       const authHeader = req.headers.authorization;
@@ -294,22 +294,22 @@ app.use('/thumb', async (req, res, next) => {
         }
       }
     }
-    
+
     if (!isAuthenticated) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'Authentication required',
         message: 'This thumbnail is private. Please provide a valid session or API token.'
       });
     }
   }
-  
+
   // Serve the thumbnail using stream (more reliable than sendFile)
   try {
     const stat = statSync(fullPath);
     res.setHeader('Content-Type', 'image/webp');
     res.setHeader('Content-Length', stat.size);
     res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
-    
+
     const readStream = createReadStream(fullPath);
     readStream.on('error', (err) => {
       console.error('Error streaming thumbnail:', fullPath, err.message);
@@ -335,12 +335,12 @@ function extractTenantId(req) {
       return potentialTenantId;
     }
   }
-  
+
   // From query parameter
   if (req.query.tenantId) {
     return req.query.tenantId;
   }
-  
+
   return null;
 }
 
@@ -352,7 +352,7 @@ const requireAuth = async (req, res, next) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const apiKey = authHeader.substring(7);
       const user = await credentialsManager.getUserByApiKey(apiKey);
-      
+
       if (user) {
         req.user = user;
         req.authMethod = 'api_token';
@@ -361,12 +361,12 @@ const requireAuth = async (req, res, next) => {
         return next();
       }
     }
-    
+
     // Check for API token in query parameter
     if (req.query.apiKey || req.query.api_key) {
       const apiKey = req.query.apiKey || req.query.api_key;
       const user = await credentialsManager.getUserByApiKey(apiKey);
-      
+
       if (user) {
         req.user = user;
         req.authMethod = 'api_token';
@@ -374,7 +374,7 @@ const requireAuth = async (req, res, next) => {
         return next();
       }
     }
-    
+
     // Check session authentication
     if (req.session && req.session.authenticated) {
       const user = await credentialsManager.getUserByUsername(req.session.username);
@@ -386,9 +386,9 @@ const requireAuth = async (req, res, next) => {
         return next();
       }
     }
-    
+
     // No valid authentication found
-    res.status(401).json({ 
+    res.status(401).json({
       error: 'Authentication required',
       message: 'Please provide a valid session or API token'
     });
@@ -403,7 +403,7 @@ const requireSuperAdmin = async (req, res, next) => {
   if (req.user && req.user.role === 'super_admin') {
     next();
   } else {
-    res.status(403).json({ 
+    res.status(403).json({
       error: 'Super admin access required',
       message: 'This operation requires super administrator privileges'
     });
@@ -415,7 +415,7 @@ const requireTenantAdmin = async (req, res, next) => {
   if (req.user && (req.user.role === 'super_admin' || req.user.role === 'tenant_admin')) {
     next();
   } else {
-    res.status(403).json({ 
+    res.status(403).json({
       error: 'Admin access required',
       message: 'This operation requires administrator privileges'
     });
@@ -427,7 +427,7 @@ const requireAdmin = async (req, res, next) => {
   if (req.user && (req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.role === 'tenant_admin')) {
     next();
   } else {
-    res.status(403).json({ 
+    res.status(403).json({
       error: 'Admin access required',
       message: 'This operation requires administrator privileges'
     });
@@ -463,12 +463,12 @@ async function verifyTenantAccess(user, tenantId) {
   if (user.role === 'super_admin') {
     return true;
   }
-  
+
   // Tenant users can only access their own tenant
   if (user.tenantId === tenantId) {
     return true;
   }
-  
+
   return false;
 }
 
@@ -480,12 +480,12 @@ app.use(async (req, res, next) => {
   if (req.path.startsWith('/api') || req.path.startsWith('/admin') || req.path.startsWith('/thumb') || req.path === '/api-docs' || req.path === '/llms.md') {
     return next();
   }
-  
+
   // Extract tenantId from URL path: /{tenantId}/...
   const pathParts = req.path.split('/').filter(p => p);
   let tenantId = null;
   let filePath = '';
-  
+
   if (pathParts.length > 0) {
     const firstPart = pathParts[0];
     // Check if first part looks like a CUID (tenantId)
@@ -497,24 +497,24 @@ app.use(async (req, res, next) => {
       filePath = pathParts.join('/');
     }
   }
-  
+
   // Decode URL-encoded path
   const decodedPath = decodeURIComponent(filePath);
-  
+
   // Resolve full path based on tenant
   const fullPath = resolveTenantFilePath(tenantId, decodedPath, uploadsPath);
-  
+
   // Security check: prevent directory traversal
   const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
   if (!fullPath.startsWith(expectedBase)) {
     return res.status(403).json({ error: 'Access denied' });
   }
-  
+
   // Check if file exists
   if (!existsSync(fullPath)) {
     return next(); // Let other handlers deal with 404
   }
-  
+
   // If tenantId is specified, verify access
   if (tenantId) {
     // Try to get user from session or API token
@@ -529,7 +529,7 @@ app.use(async (req, res, next) => {
         const apiKey = req.query.apiKey || req.query.api_key;
         user = await credentialsManager.getUserByApiKey(apiKey);
       }
-      
+
       if (user && !(await verifyTenantAccess(user, tenantId))) {
         return res.status(403).json({ error: 'Access denied to this tenant' });
       }
@@ -538,7 +538,7 @@ app.use(async (req, res, next) => {
       // Private files will be blocked by access level check below
     }
   }
-  
+
   // Get effective access level (checks file and parent hierarchy)
   // For tenant files, we'll default to public for now
   // Cache would need to be tenant-aware in the future to properly check tenant file access levels
@@ -552,16 +552,16 @@ app.use(async (req, res, next) => {
       console.warn('Cache access level check failed:', e.message);
     }
   }
-  
+
   // If private, check authentication
   if (accessLevel === 'private') {
     let isAuthenticated = false;
-    
+
     // Check session authentication
     if (req.session && req.session.authenticated) {
       isAuthenticated = true;
     }
-    
+
     // Check for API token in query parameter
     if (!isAuthenticated && (req.query.apiKey || req.query.api_key)) {
       const apiKey = req.query.apiKey || req.query.api_key;
@@ -574,7 +574,7 @@ app.use(async (req, res, next) => {
         // Ignore auth errors
       }
     }
-    
+
     // Check for API token in Authorization header
     if (!isAuthenticated) {
       const authHeader = req.headers.authorization;
@@ -590,15 +590,15 @@ app.use(async (req, res, next) => {
         }
       }
     }
-    
+
     if (!isAuthenticated) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'Authentication required',
         message: 'This file is private. Please provide a valid session or API token.'
       });
     }
   }
-  
+
   // Serve the file (public or authenticated private)
   return res.sendFile(fullPath);
 });
@@ -625,44 +625,44 @@ app.get('/llms.md', (req, res) => {
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    
+
     if (!username || !password) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Username and password are required' 
+      return res.status(400).json({
+        success: false,
+        error: 'Username and password are required'
       });
     }
-    
+
     const user = await credentialsManager.getUserByUsername(username);
-    
+
     if (!user) {
-      return res.status(401).json({ 
-        success: false, 
-        error: 'Invalid credentials' 
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials'
       });
     }
-    
+
     const isValid = await credentialsManager.verifyPassword(password, user.password);
-    
+
     if (!isValid) {
-      return res.status(401).json({ 
-        success: false, 
-        error: 'Invalid credentials' 
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials'
       });
     }
-    
+
     req.session.authenticated = true;
     req.session.username = username;
     req.session.role = user.role;
     req.session.tenantId = user.tenantId || null;
-    
+
     req.session.save((err) => {
       if (err) {
         console.error('Session save error:', err);
         return res.status(500).json({ success: false, error: 'Session save failed' });
       }
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: 'Login successful',
         user: {
           username: user.username,
@@ -705,7 +705,7 @@ app.get('/api/auth/status', async (req, res) => {
         });
       }
     }
-    
+
     res.json({ authenticated: false });
   } catch (error) {
     console.error('Auth status error:', error);
@@ -719,13 +719,13 @@ app.get('/api/auth/status', async (req, res) => {
 app.post('/api/super-admin/tenants', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
     const { name } = req.body;
-    
+
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Tenant name is required' });
     }
-    
+
     const tenant = await credentialsManager.createTenant(name.trim(), req.user.username);
-    
+
     res.json({
       success: true,
       message: 'Tenant created successfully',
@@ -751,11 +751,11 @@ app.get('/api/super-admin/tenants/:tenantId', requireAuth, requireSuperAdmin, as
   try {
     const { tenantId } = req.params;
     const tenant = await credentialsManager.getTenantById(tenantId);
-    
+
     if (!tenant) {
       return res.status(404).json({ error: 'Tenant not found' });
     }
-    
+
     res.json({ success: true, tenant });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -767,13 +767,13 @@ app.put('/api/super-admin/tenants/:tenantId', requireAuth, requireSuperAdmin, as
   try {
     const { tenantId } = req.params;
     const { name } = req.body;
-    
+
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Tenant name is required' });
     }
-    
+
     const tenant = await credentialsManager.updateTenant(tenantId, { name: name.trim() });
-    
+
     res.json({
       success: true,
       message: 'Tenant updated successfully',
@@ -796,7 +796,7 @@ app.get('/api/super-admin/system-resources', requireAuth, requireSuperAdmin, asy
     // CPU information
     const cpuInfo = cpus();
     const cpuCount = cpuInfo.length;
-    
+
     // Calculate CPU usage by measuring over time
     let cpuUsagePercent = 0;
     if (cpuInfo.length > 0) {
@@ -805,15 +805,15 @@ app.get('/api/super-admin/system-resources', requireAuth, requireSuperAdmin, asy
         idle: cpu.times.idle,
         total: cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq
       }));
-      
+
       // Wait 100ms and measure again
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       const endMeasure = cpus().map(cpu => ({
         idle: cpu.times.idle,
         total: cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq
       }));
-      
+
       // Calculate average CPU usage across all cores
       let totalUsage = 0;
       for (let i = 0; i < cpuInfo.length; i++) {
@@ -829,10 +829,10 @@ app.get('/api/super-admin/system-resources', requireAuth, requireSuperAdmin, asy
     let diskTotal = 0;
     let diskUsed = 0;
     let diskAvailable = 0;
-    
+
     try {
       const uploadPath = uploadsPath;
-      
+
       // Get disk space using system command (cross-platform)
       if (platform() !== 'win32') {
         // Unix/Mac: use df command
@@ -862,7 +862,7 @@ app.get('/api/super-admin/system-resources', requireAuth, requireSuperAdmin, asy
           console.error('Error getting disk space on Windows:', err.message);
         }
       }
-      
+
       // Fallback: if system commands fail, estimate from uploads directory size
       if (diskTotal === 0 && existsSync(uploadPath)) {
         async function calculateDirSize(dirPath) {
@@ -888,7 +888,7 @@ app.get('/api/super-admin/system-resources', requireAuth, requireSuperAdmin, asy
           }
           return size;
         }
-        
+
         diskUsed = await calculateDirSize(uploadPath);
         // For fallback, we can't determine total/available without system info
         diskTotal = diskUsed * 2; // Rough estimate
@@ -927,11 +927,11 @@ app.get('/api/super-admin/system-resources', requireAuth, requireSuperAdmin, asy
     let totalStorageUsed = 0;
     try {
       const tenants = await credentialsManager.listTenants();
-      
+
       async function calculateTenantStorage(tenantId) {
         const tenantBasePath = path.join(uploadsPath, tenantId);
         if (!existsSync(tenantBasePath)) return 0;
-        
+
         let size = 0;
         async function calculateSize(dirPath) {
           if (!existsSync(dirPath)) return;
@@ -955,11 +955,11 @@ app.get('/api/super-admin/system-resources', requireAuth, requireSuperAdmin, asy
             // Skip inaccessible directories
           }
         }
-        
+
         await calculateSize(tenantBasePath);
         return size;
       }
-      
+
       for (const tenant of tenants) {
         totalStorageUsed += await calculateTenantStorage(tenant.tenantId);
       }
@@ -1018,9 +1018,9 @@ app.get('/api/super-admin/system-resources', requireAuth, requireSuperAdmin, asy
 app.delete('/api/super-admin/tenants/:tenantId', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
     const { tenantId } = req.params;
-    
+
     await credentialsManager.deleteTenant(tenantId);
-    
+
     res.json({
       success: true,
       message: 'Tenant deleted successfully'
@@ -1046,28 +1046,28 @@ app.get('/api/user/me', requireAuth, async (req, res) => {
 app.post('/api/user/change-password', requireAuth, async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
-    
+
     if (!oldPassword || !newPassword) {
-      return res.status(400).json({ 
-        error: 'Old password and new password are required' 
+      return res.status(400).json({
+        error: 'Old password and new password are required'
       });
     }
-    
+
     if (newPassword.length < 8) {
-      return res.status(400).json({ 
-        error: 'New password must be at least 8 characters long' 
+      return res.status(400).json({
+        error: 'New password must be at least 8 characters long'
       });
     }
-    
+
     await credentialsManager.changePassword(
-      req.user.username, 
-      oldPassword, 
+      req.user.username,
+      oldPassword,
       newPassword
     );
-    
-    res.json({ 
-      success: true, 
-      message: 'Password changed successfully' 
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -1078,22 +1078,22 @@ app.post('/api/user/change-password', requireAuth, async (req, res) => {
 app.post('/api/user/generate-token', requireAuth, async (req, res) => {
   try {
     const { password } = req.body;
-    
+
     if (!password) {
-      return res.status(400).json({ 
-        error: 'Password is required to generate API token' 
+      return res.status(400).json({
+        error: 'Password is required to generate API token'
       });
     }
-    
+
     const apiKey = await credentialsManager.generateApiToken(
-      req.user.username, 
+      req.user.username,
       password
     );
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'API token generated successfully',
-      apiKey 
+      apiKey
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -1104,18 +1104,18 @@ app.post('/api/user/generate-token', requireAuth, async (req, res) => {
 app.delete('/api/user/delete-token', requireAuth, async (req, res) => {
   try {
     const { password } = req.body;
-    
+
     if (!password) {
-      return res.status(400).json({ 
-        error: 'Password is required to delete API token' 
+      return res.status(400).json({
+        error: 'Password is required to delete API token'
       });
     }
-    
+
     await credentialsManager.deleteApiToken(req.user.username, password);
-    
-    res.json({ 
-      success: true, 
-      message: 'API token deleted successfully' 
+
+    res.json({
+      success: true,
+      message: 'API token deleted successfully'
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -1130,14 +1130,14 @@ app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
     // Super admin can list all users or filter by tenantId
     // Tenant admin can only list users in their tenant
     let tenantId = req.query.tenantId;
-    
+
     if (req.user.role === 'tenant_admin') {
       tenantId = req.user.tenantId;
     } else if (req.user.role === 'super_admin' && !tenantId) {
       // Super admin without tenantId gets all users
       tenantId = null;
     }
-    
+
     const users = await credentialsManager.listUsers(tenantId);
     res.json({ success: true, users });
   } catch (error) {
@@ -1161,38 +1161,38 @@ app.post('/api/super-admin/tenants/:tenantId/users', requireAuth, requireSuperAd
   try {
     const { tenantId } = req.params;
     const { username, role, password } = req.body;
-    
+
     if (!username) {
-      return res.status(400).json({ 
-        error: 'Username is required' 
+      return res.status(400).json({
+        error: 'Username is required'
       });
     }
-    
+
     // Allow simple usernames or valid email addresses
     const simpleUsernamePattern = /^[a-zA-Z0-9_-]+$/;
     const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    
+
     if (!simpleUsernamePattern.test(username) && !emailPattern.test(username)) {
-      return res.status(400).json({ 
-        error: 'Username must be alphanumeric (with hyphens/underscores) or a valid email address' 
+      return res.status(400).json({
+        error: 'Username must be alphanumeric (with hyphens/underscores) or a valid email address'
       });
     }
-    
+
     // Validate tenant exists
     const tenant = await credentialsManager.getTenantById(tenantId);
     if (!tenant) {
       return res.status(404).json({ error: 'Tenant not found' });
     }
-    
+
     const newUser = await credentialsManager.createUser(
-      username, 
+      username,
       role || 'user',
       tenantId,
       password
     );
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'User created successfully',
       user: newUser
     });
@@ -1205,23 +1205,23 @@ app.post('/api/super-admin/tenants/:tenantId/users', requireAuth, requireSuperAd
 app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { username, role, password, tenantId } = req.body;
-    
+
     if (!username) {
-      return res.status(400).json({ 
-        error: 'Username is required' 
+      return res.status(400).json({
+        error: 'Username is required'
       });
     }
-    
+
     // Allow simple usernames or valid email addresses
     const simpleUsernamePattern = /^[a-zA-Z0-9_-]+$/;
     const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    
+
     if (!simpleUsernamePattern.test(username) && !emailPattern.test(username)) {
-      return res.status(400).json({ 
-        error: 'Username must be alphanumeric (with hyphens/underscores) or a valid email address' 
+      return res.status(400).json({
+        error: 'Username must be alphanumeric (with hyphens/underscores) or a valid email address'
       });
     }
-    
+
     // Determine tenantId based on user role
     let targetTenantId = tenantId;
     if (req.user.role === 'tenant_admin') {
@@ -1232,7 +1232,7 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
       // If tenantId not provided, create as super admin
       targetTenantId = tenantId || null;
     }
-    
+
     // If tenantId provided, validate tenant exists
     if (targetTenantId) {
       const tenant = await credentialsManager.getTenantById(targetTenantId);
@@ -1240,16 +1240,16 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
         return res.status(404).json({ error: 'Tenant not found' });
       }
     }
-    
+
     const newUser = await credentialsManager.createUser(
-      username, 
+      username,
       role || 'user',
       targetTenantId,
       password
     );
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'User created successfully',
       user: newUser
     });
@@ -1264,34 +1264,34 @@ app.post('/api/tenant-admin/users', requireAuth, requireTenantAdmin, async (req,
     if (req.user.role !== 'tenant_admin') {
       return res.status(403).json({ error: 'Tenant admin access required' });
     }
-    
+
     const { username, role, password } = req.body;
-    
+
     if (!username) {
-      return res.status(400).json({ 
-        error: 'Username is required' 
+      return res.status(400).json({
+        error: 'Username is required'
       });
     }
-    
+
     // Allow simple usernames or valid email addresses
     const simpleUsernamePattern = /^[a-zA-Z0-9_-]+$/;
     const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    
+
     if (!simpleUsernamePattern.test(username) && !emailPattern.test(username)) {
-      return res.status(400).json({ 
-        error: 'Username must be alphanumeric (with hyphens/underscores) or a valid email address' 
+      return res.status(400).json({
+        error: 'Username must be alphanumeric (with hyphens/underscores) or a valid email address'
       });
     }
-    
+
     const newUser = await credentialsManager.createUser(
-      username, 
+      username,
       role || 'user',
       req.user.tenantId,
       password
     );
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'User created successfully',
       user: newUser
     });
@@ -1305,26 +1305,26 @@ app.post('/api/admin/users/:username/reset-password', requireAuth, requireAdmin,
   try {
     const { username } = req.params;
     const { customPassword } = req.body;
-    
+
     if (username === req.user.username) {
-      return res.status(400).json({ 
-        error: 'Cannot reset your own password. Use the change password feature instead.' 
+      return res.status(400).json({
+        error: 'Cannot reset your own password. Use the change password feature instead.'
       });
     }
-    
+
     // Validate custom password if provided
     if (customPassword !== undefined && customPassword !== null) {
       if (customPassword.length < 8) {
-        return res.status(400).json({ 
-          error: 'Password must be at least 8 characters long' 
+        return res.status(400).json({
+          error: 'Password must be at least 8 characters long'
         });
       }
     }
-    
+
     const newPassword = await credentialsManager.resetUserPassword(username, req.user.username, customPassword);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'Password reset successfully',
       newPassword: customPassword ? undefined : newPassword // Only return password if auto-generated
     });
@@ -1337,12 +1337,12 @@ app.post('/api/admin/users/:username/reset-password', requireAuth, requireAdmin,
 app.delete('/api/admin/users/:username', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { username } = req.params;
-    
+
     await credentialsManager.deleteUser(username, req.user.username);
-    
-    res.json({ 
-      success: true, 
-      message: 'User deleted successfully' 
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully'
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -1356,18 +1356,18 @@ app.get('/api/files', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     // For super admin viewing root, show all tenants
     const subPath = req.query.path || '';
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
     const showHidden = req.query.showHidden === 'true';
-    
+
     // If super admin and no tenantId specified and path is empty, list tenants
     if (req.user.role === 'super_admin' && !tenantId && subPath === '') {
       const tenants = await credentialsManager.listTenants();
@@ -1381,7 +1381,7 @@ app.get('/api/files', requireAuth, async (req, res) => {
         accessLevel: 'public',
         isTenant: true // Mark as tenant folder
       }));
-      
+
       return res.json({
         currentPath: '',
         items: tenantItems,
@@ -1395,20 +1395,20 @@ app.get('/api/files', requireAuth, async (req, res) => {
         }
       });
     }
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     const fullPath = resolveTenantFilePath(tenantId, subPath, uploadsPath);
     const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
-    
+
     // Security check: prevent directory traversal
     if (!fullPath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     // Try cache first, fallback to filesystem
     // Skip cache for tenant-specific requests as cache may not be tenant-aware
     if (fileCache.isReady() && !tenantId) {
@@ -1435,7 +1435,7 @@ app.get('/api/files', requireAuth, async (req, res) => {
         console.error('Cache error, falling back to filesystem:', cacheError.message);
       }
     }
-    
+
     // Filesystem fallback with pagination
     const allItems = await fs.readdir(fullPath, { withFileTypes: true });
     let fileList = await Promise.all(
@@ -1448,7 +1448,7 @@ app.get('/api/files', requireAuth, async (req, res) => {
           // Calculate relative path from tenant base or uploads base
           const basePath = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
           const relativePath = path.relative(basePath, itemPath);
-          
+
           // Get access level from cache if available
           let accessLevel = 'public';
           if (fileCache.isReady()) {
@@ -1461,7 +1461,7 @@ app.get('/api/files', requireAuth, async (req, res) => {
               // Default to public if cache fails
             }
           }
-          
+
           const isDir = item.isDirectory();
           return {
             name: item.name,
@@ -1475,20 +1475,20 @@ app.get('/api/files', requireAuth, async (req, res) => {
           };
         })
     );
-    
+
     // Sort: directories first, then by name (case-insensitive)
     fileList.sort((a, b) => {
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
       return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
     });
-    
+
     // Apply pagination
     const total = fileList.length;
     const offset = (page - 1) * limit;
     const paginatedItems = fileList.slice(offset, offset + limit);
-    
-    res.json({ 
+
+    res.json({
       currentPath: subPath,
       items: paginatedItems,
       pagination: {
@@ -1510,30 +1510,30 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     const basePath = req.body.basePath || req.body.path || '';
     const relativePaths = req.body.relativePaths;
     const accessLevel = req.body.mediaAccessLevel || 'public'; // Default to public
-    
+
     // Validate access level
     if (!['public', 'private'].includes(accessLevel)) {
-      return res.status(400).json({ 
-        error: 'Invalid mediaAccessLevel. Must be "public" or "private"' 
+      return res.status(400).json({
+        error: 'Invalid mediaAccessLevel. Must be "public" or "private"'
       });
     }
-    
+
     const isFolderUpload = relativePaths && (Array.isArray(relativePaths) ? relativePaths.length > 0 : true);
-    
+
     if (isFolderUpload) {
       console.log('📁 Folder upload detected');
       console.log(`Tenant: ${tenantId || '(none)'}`);
@@ -1541,16 +1541,16 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       console.log(`Files: ${req.files.length}`);
       console.log(`Access level: ${accessLevel}`);
     }
-    
+
     const movedFiles = [];
     const createdFolders = new Set();
     const tenantBasePath = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
-    
+
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
       let targetPath;
       let relativePath;
-      
+
       if (relativePaths && Array.isArray(relativePaths) && relativePaths[i]) {
         relativePath = relativePaths[i];
         targetPath = path.join(tenantBasePath, basePath, relativePath);
@@ -1560,19 +1560,19 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       } else {
         targetPath = path.join(tenantBasePath, basePath, file.originalname);
       }
-      
+
       const targetDir = path.dirname(targetPath);
       await fs.mkdir(targetDir, { recursive: true });
-      
+
       if (isFolderUpload) {
         const folderPath = path.relative(uploadsPath, targetDir);
         if (folderPath) {
           createdFolders.add(folderPath);
         }
       }
-      
+
       await fs.rename(file.path, targetPath);
-      
+
       const fileRelativePath = path.relative(tenantBasePath, targetPath);
       movedFiles.push({
         name: file.originalname,
@@ -1580,7 +1580,7 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
         path: fileRelativePath,
         accessLevel
       });
-      
+
       // Update cache for uploaded file with access level
       try {
         const stats = await fs.stat(targetPath);
@@ -1594,7 +1594,7 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
         // Don't fail upload if cache update fails
         console.warn('Cache update failed for file:', fileRelativePath);
       }
-      
+
       // Generate thumbnail for images (non-blocking)
       if (thumbnailGenerator.isImageFile(file.originalname)) {
         thumbnailGenerator.generateThumbnail(fileRelativePath, tenantId || null).catch(err => {
@@ -1602,7 +1602,7 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
         });
       }
     }
-    
+
     // Update cache for created folders with access level
     for (const folderPath of createdFolders) {
       try {
@@ -1619,7 +1619,7 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
         console.warn('Cache update failed for folder:', folderPath);
       }
     }
-    
+
     if (isFolderUpload && createdFolders.size > 0) {
       console.log(`✅ Created folder structure:`);
       Array.from(createdFolders).sort().forEach(folder => {
@@ -1628,19 +1628,19 @@ app.post('/api/upload', requireAuth, upload.array('files', 500), async (req, res
       });
       console.log(`📄 Uploaded ${movedFiles.length} files`);
     }
-    
+
     let message;
     if (relativePaths) {
-      const folderName = Array.isArray(relativePaths) 
-        ? relativePaths[0].split('/')[0] 
+      const folderName = Array.isArray(relativePaths)
+        ? relativePaths[0].split('/')[0]
         : relativePaths.split('/')[0];
       message = `Folder "${folderName}" uploaded successfully (${movedFiles.length} files)`;
     } else {
       message = `${movedFiles.length} file(s) uploaded successfully`;
     }
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message,
       files: movedFiles,
       foldersCreated: createdFolders.size,
@@ -1666,35 +1666,35 @@ app.post('/api/folder', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     const { path: subPath, name, mediaAccessLevel } = req.body;
     const accessLevel = mediaAccessLevel || 'public'; // Default to public
     const tenantBasePath = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
     const folderPath = path.join(tenantBasePath, subPath || '', name);
-    
+
     // Validate access level
     if (!['public', 'private'].includes(accessLevel)) {
-      return res.status(400).json({ 
-        error: 'Invalid mediaAccessLevel. Must be "public" or "private"' 
+      return res.status(400).json({
+        error: 'Invalid mediaAccessLevel. Must be "public" or "private"'
       });
     }
-    
+
     if (!folderPath.startsWith(tenantBasePath)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     await fs.mkdir(folderPath, { recursive: true });
-    
+
     // Update cache with access level
     try {
       const relativePath = path.relative(tenantBasePath, folderPath);
@@ -1708,9 +1708,9 @@ app.post('/api/folder', requireAuth, async (req, res) => {
     } catch (cacheErr) {
       console.warn('Cache update failed for new folder:', name);
     }
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'Folder created successfully',
       accessLevel
     });
@@ -1724,40 +1724,40 @@ app.post('/api/file', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     const { path: subPath, name, content, mediaAccessLevel } = req.body;
     const accessLevel = mediaAccessLevel || 'public'; // Default to public
-    
+
     if (!name) {
       return res.status(400).json({ error: 'File name is required' });
     }
-    
+
     // Validate access level
     if (!['public', 'private'].includes(accessLevel)) {
       return res.status(400).json({
         error: 'Invalid mediaAccessLevel. Must be "public" or "private"'
       });
     }
-    
+
     // Sanitize filename - remove path separators and dangerous characters
     const sanitizedName = name.replace(/[\/\\:*?"<>|]/g, '_');
     const tenantBasePath = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
     const filePath = path.join(tenantBasePath, subPath || '', sanitizedName);
-    
+
     if (!filePath.startsWith(tenantBasePath)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     // Check if file already exists
     try {
       await fs.access(filePath);
@@ -1765,14 +1765,14 @@ app.post('/api/file', requireAuth, async (req, res) => {
     } catch {
       // File doesn't exist, continue
     }
-    
+
     // Ensure parent directory exists
     const parentDir = path.dirname(filePath);
     await fs.mkdir(parentDir, { recursive: true });
-    
+
     // Write file with content (or empty string if no content)
     await fs.writeFile(filePath, content || '', 'utf8');
-    
+
     // Update cache with access level
     try {
       const relativePath = path.relative(tenantBasePath, filePath);
@@ -1786,7 +1786,7 @@ app.post('/api/file', requireAuth, async (req, res) => {
     } catch (cacheErr) {
       console.warn('Cache update failed for new file:', sanitizedName);
     }
-    
+
     res.json({
       success: true,
       message: 'File created successfully',
@@ -1803,42 +1803,42 @@ app.delete('/api/delete', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     const { path: itemPath } = req.body;
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     const fullPath = resolveTenantFilePath(tenantId, itemPath, uploadsPath);
     const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
 
     if (!fullPath.startsWith(expectedBase) || fullPath === expectedBase) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     const stats = await fs.stat(fullPath);
     const isDirectory = stats.isDirectory();
-    
+
     if (isDirectory) {
       await fs.rm(fullPath, { recursive: true, force: true });
     } else {
       await fs.unlink(fullPath);
     }
-    
+
     // Update cache (deleteFile handles recursive deletion for directories)
     try {
       fileCache.deleteFile(itemPath);
     } catch (cacheErr) {
       console.warn('Cache update failed for delete:', itemPath);
     }
-    
+
     // Delete corresponding thumbnail(s)
     try {
       if (isDirectory) {
@@ -1849,7 +1849,7 @@ app.delete('/api/delete', requireAuth, async (req, res) => {
     } catch (thumbErr) {
       console.warn('Thumbnail delete failed for:', itemPath, thumbErr.message);
     }
-    
+
     res.json({ success: true, message: 'Deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1861,31 +1861,31 @@ app.get('/api/file-content', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     const filePath = req.query.path;
-    
+
     if (!filePath) {
       return res.status(400).json({ error: 'File path is required' });
     }
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     const fullPath = resolveTenantFilePath(tenantId, filePath, uploadsPath);
     const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
-    
+
     // Security check: prevent directory traversal
     if (!fullPath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     // Check if file exists and is a file (not directory)
     try {
       const stats = await fs.stat(fullPath);
@@ -1895,10 +1895,10 @@ app.get('/api/file-content', requireAuth, async (req, res) => {
     } catch (error) {
       return res.status(404).json({ error: 'File not found' });
     }
-    
+
     // Read file content as text
     const content = await fs.readFile(fullPath, 'utf8');
-    
+
     res.json({ success: true, content });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1910,31 +1910,31 @@ app.post('/api/file-content', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     const { path: filePath, content } = req.body;
-    
+
     if (!filePath) {
       return res.status(400).json({ error: 'File path is required' });
     }
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     const fullPath = resolveTenantFilePath(tenantId, filePath, uploadsPath);
     const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
-    
+
     // Security check: prevent directory traversal
     if (!fullPath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     // Check if file exists and is a file (not directory)
     try {
       const stats = await fs.stat(fullPath);
@@ -1944,10 +1944,10 @@ app.post('/api/file-content', requireAuth, async (req, res) => {
     } catch (error) {
       return res.status(404).json({ error: 'File not found' });
     }
-    
+
     // Write file content as text
     await fs.writeFile(fullPath, content || '', 'utf8');
-    
+
     res.json({ success: true, message: 'File saved successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1959,42 +1959,42 @@ app.post('/api/rename', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     const { path: itemPath, newName } = req.body;
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     const oldPath = resolveTenantFilePath(tenantId, itemPath, uploadsPath);
     const newPath = path.join(path.dirname(oldPath), newName);
     const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
-    
+
     if (!oldPath.startsWith(expectedBase) || !newPath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     // Check if it's a directory before renaming
     const stats = await fs.stat(oldPath);
     const isDirectory = stats.isDirectory();
-    
+
     await fs.rename(oldPath, newPath);
-    
+
     const newRelativePath = path.relative(expectedBase, newPath);
-    
+
     // Update cache (renameFile handles recursive path updates for directories)
     try {
       fileCache.renameFile(itemPath, newRelativePath);
     } catch (cacheErr) {
       console.warn('Cache update failed for rename:', itemPath);
     }
-    
+
     // Rename corresponding thumbnail(s)
     try {
       if (isDirectory) {
@@ -2013,7 +2013,7 @@ app.post('/api/rename', requireAuth, async (req, res) => {
     } catch (thumbErr) {
       console.warn('Thumbnail rename failed for:', itemPath, thumbErr.message);
     }
-    
+
     res.json({ success: true, message: 'Renamed successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -2025,12 +2025,12 @@ app.post('/api/duplicate', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     const { path: itemPath } = req.body;
     if (!itemPath) {
       return res.status(400).json({ error: 'Path is required' });
@@ -2060,7 +2060,7 @@ app.post('/api/duplicate', requireAuth, async (req, res) => {
     const nameWithoutExt = path.basename(baseName, ext);
 
     // Generate new name with (copy) suffix
-    let newName = isDirectory 
+    let newName = isDirectory
       ? `${baseName} (copy)`
       : `${nameWithoutExt} (copy)${ext}`;
     let newPath = path.join(dirName, newName);
@@ -2095,8 +2095,8 @@ app.post('/api/duplicate', requireAuth, async (req, res) => {
       } else {
         // Add single file to cache
         const newStats = await fs.stat(newPath);
-        const accessLevel = fileCache.isReady() 
-          ? fileCache.getAccessLevel(itemPath) 
+        const accessLevel = fileCache.isReady()
+          ? fileCache.getAccessLevel(itemPath)
           : 'public';
         fileCache.addFile(newRelativePath, newStats, accessLevel);
       }
@@ -2122,11 +2122,11 @@ app.post('/api/duplicate', requireAuth, async (req, res) => {
       }
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Duplicated successfully',
       newPath: newRelativePath,
-      newName 
+      newName
     });
   } catch (error) {
     console.error('Duplicate error:', error);
@@ -2139,12 +2139,12 @@ app.post('/api/move', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     const { path: itemPath, destination } = req.body;
     if (!itemPath || !destination) {
       return res.status(400).json({ error: 'Path and destination are required' });
@@ -2221,8 +2221,8 @@ app.post('/api/move', requireAuth, async (req, res) => {
       }
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Moved successfully',
       newPath: newRelativePath
     });
@@ -2237,47 +2237,47 @@ app.get('/api/download', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     const itemPath = req.query.path;
     if (!itemPath) {
       return res.status(400).json({ error: 'Path is required' });
     }
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     const fullPath = resolveTenantFilePath(tenantId, itemPath, uploadsPath);
     const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
-    
+
     if (!fullPath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     if (!existsSync(fullPath)) {
       return res.status(404).json({ error: 'File or folder not found' });
     }
-    
+
     const stats = statSync(fullPath);
-    
+
     if (stats.isDirectory()) {
       // Folder download - create zip on-the-fly
       const folderName = path.basename(fullPath);
       const zipFileName = `${folderName}.zip`;
-      
+
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename="${zipFileName}"`);
-      
+
       const archive = archiver('zip', {
         zlib: { level: 6 } // Compression level (0-9)
       });
-      
+
       // Handle archive errors
       archive.on('error', (err) => {
         console.error('Archive error:', err);
@@ -2285,13 +2285,13 @@ app.get('/api/download', requireAuth, async (req, res) => {
           res.status(500).json({ error: 'Failed to create archive' });
         }
       });
-      
+
       // Pipe archive to response
       archive.pipe(res);
-      
+
       // Add the folder contents to the archive
       archive.directory(fullPath, folderName);
-      
+
       // Finalize the archive
       await archive.finalize();
     } else {
@@ -2309,45 +2309,45 @@ app.post('/api/access-level', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     const { path: itemPath, accessLevel } = req.body;
-    
+
     if (!itemPath) {
       return res.status(400).json({ error: 'Path is required' });
     }
-    
+
     if (!accessLevel || !['public', 'private'].includes(accessLevel)) {
-      return res.status(400).json({ 
-        error: 'Invalid accessLevel. Must be "public" or "private"' 
+      return res.status(400).json({
+        error: 'Invalid accessLevel. Must be "public" or "private"'
       });
     }
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     const fullPath = resolveTenantFilePath(tenantId, itemPath, uploadsPath);
     const expectedBase = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
-    
+
     // Security check
     if (!fullPath.startsWith(expectedBase)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     // Check if file/folder exists
     if (!existsSync(fullPath)) {
       return res.status(404).json({ error: 'File or folder not found' });
     }
-    
+
     // Update access level in cache
     const updated = fileCache.updateAccessLevel(itemPath, accessLevel);
-    
+
     if (!updated) {
       // If not in cache, try to add it first
       try {
@@ -2359,14 +2359,14 @@ app.post('/api/access-level', requireAuth, async (req, res) => {
           isDirectory: stats.isDirectory()
         }, accessLevel);
       } catch (cacheErr) {
-        return res.status(500).json({ 
-          error: 'Failed to update access level. Cache may not be ready.' 
+        return res.status(500).json({
+          error: 'Failed to update access level. Cache may not be ready.'
         });
       }
     }
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: `Access level updated to ${accessLevel}`,
       path: itemPath,
       accessLevel
@@ -2384,39 +2384,39 @@ app.get('/api/search', requireAuth, async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
     const showHidden = req.query.showHidden === 'true';
-    
+
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     // Get search path (optional - if provided, search only within this path)
     const searchPath = req.query.path || '';
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     // Determine the base path for searching
     // If tenantId is provided, search within that tenant's directory
     // If searchPath is provided, search from that path within the tenant
     let searchBasePath;
     let tenantRootPath; // For calculating relative paths
-    
+
     if (tenantId) {
       // Search within a specific tenant
       const tenantRoot = path.join(uploadsPath, tenantId);
       const fullPath = resolveTenantFilePath(tenantId, searchPath, uploadsPath);
-      
+
       // Security check: prevent directory traversal
       if (!fullPath.startsWith(tenantRoot)) {
         return res.status(403).json({ error: 'Access denied' });
       }
-      
+
       searchBasePath = fullPath;
       tenantRootPath = tenantRoot; // Use tenant root for relative path calculation
     } else {
@@ -2425,19 +2425,19 @@ app.get('/api/search', requireAuth, async (req, res) => {
       searchBasePath = resolveTenantFilePath(null, searchPath, uploadsPath);
       tenantRootPath = uploadsPath; // Use uploads root for relative path calculation
     }
-    
+
     // Validate regex if enabled
     let regexPattern;
     if (useRegex) {
       try {
         regexPattern = new RegExp(query, 'i'); // case-insensitive
       } catch (e) {
-        return res.status(400).json({ 
-          error: `Invalid regular expression: ${e.message}` 
+        return res.status(400).json({
+          error: `Invalid regular expression: ${e.message}`
         });
       }
     }
-    
+
     // Try cache first for non-regex searches (skip if tenant-specific as cache may not be tenant-aware)
     if (fileCache.isReady() && !useRegex && !tenantId) {
       try {
@@ -2464,25 +2464,25 @@ app.get('/api/search', requireAuth, async (req, res) => {
         console.error('Cache search error, falling back to filesystem:', cacheError.message);
       }
     }
-    
+
     // Filesystem search (always used for tenant-specific searches or regex)
     const results = [];
-    
+
     async function searchDir(dirPath) {
       try {
         const items = await fs.readdir(dirPath, { withFileTypes: true });
-        
+
         for (const item of items) {
           // Skip symlinks
           if (item.isSymbolicLink()) continue;
-          
+
           // Skip hidden files if not showing them
           if (!showHidden && item.name.startsWith('.')) continue;
-          
+
           const fullPath = path.join(dirPath, item.name);
           // Calculate relative path from tenant root (or uploads root if no tenant)
           const relativePath = path.relative(tenantRootPath, fullPath);
-          
+
           // Check if filename matches
           let matches = false;
           if (useRegex) {
@@ -2490,10 +2490,10 @@ app.get('/api/search', requireAuth, async (req, res) => {
           } else {
             matches = item.name.toLowerCase().includes(query.toLowerCase());
           }
-          
+
           if (matches) {
             const stats = await fs.stat(fullPath);
-            
+
             // Get access level from cache if available
             let accessLevel = 'public';
             if (fileCache.isReady()) {
@@ -2506,7 +2506,7 @@ app.get('/api/search', requireAuth, async (req, res) => {
                 // Default to public if cache fails
               }
             }
-            
+
             const isDir = item.isDirectory();
             results.push({
               name: item.name,
@@ -2515,10 +2515,11 @@ app.get('/api/search', requireAuth, async (req, res) => {
               size: stats.size,
               modified: stats.mtime,
               accessLevel,
-              thumbnailUrl: !isDir ? thumbnailGenerator.getThumbnailUrl(relativePath, tenantId || null) : null
+              thumbnailUrl: !isDir ? thumbnailGenerator.getThumbnailUrl(relativePath, tenantId || null) : null,
+              tenantId: tenantId || null
             });
           }
-          
+
           // Continue searching in subdirectories
           if (item.isDirectory()) {
             await searchDir(fullPath);
@@ -2531,23 +2532,23 @@ app.get('/api/search', requireAuth, async (req, res) => {
         }
       }
     }
-    
+
     // Start searching from the base path
     await searchDir(searchBasePath);
-    
+
     // Sort results: directories first, then by name
     results.sort((a, b) => {
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
       return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
     });
-    
+
     // Apply pagination
     const total = results.length;
     const offset = (page - 1) * limit;
     const paginatedResults = results.slice(offset, offset + limit);
-    
-    res.json({ 
+
+    res.json({
       results: paginatedResults,
       pagination: {
         page,
@@ -2568,19 +2569,19 @@ app.get('/api/storage', requireAuth, async (req, res) => {
   try {
     // Get tenantId from query or user's tenant
     let tenantId = req.query.tenantId || req.tenantId;
-    
+
     // For tenant users, enforce their tenant
     if (req.user.tenantId && req.user.role !== 'super_admin') {
       tenantId = req.user.tenantId;
     }
-    
+
     // Verify tenant access
     if (tenantId && !(await verifyTenantAccess(req.user, tenantId))) {
       return res.status(403).json({ error: 'Access denied to this tenant' });
     }
-    
+
     const tenantBasePath = tenantId ? path.join(uploadsPath, tenantId) : uploadsPath;
-    
+
     // Filesystem calculation (cache doesn't support tenant filtering yet)
     let totalSize = 0;
     let fileCount = 0;
@@ -2588,7 +2589,7 @@ app.get('/api/storage', requireAuth, async (req, res) => {
 
     async function calculateSize(dirPath) {
       if (!existsSync(dirPath)) return;
-      
+
       const items = await fs.readdir(dirPath, { withFileTypes: true });
 
       for (const item of items) {
@@ -2607,9 +2608,9 @@ app.get('/api/storage', requireAuth, async (req, res) => {
         }
       }
     }
-    
+
     await calculateSize(tenantBasePath);
-    
+
     res.json({
       totalSize,
       fileCount,
@@ -2631,17 +2632,17 @@ app.post('/api/cache/rebuild', requireAuth, requireAdmin, async (req, res) => {
     if (!fileCache.isReady()) {
       return res.status(503).json({ error: 'Cache not initialized' });
     }
-    
+
     // Run rebuild in background
     fileCache.rebuildCache().then(() => {
       console.log('✅ Manual cache rebuild completed');
     }).catch(err => {
       console.error('❌ Manual cache rebuild failed:', err.message);
     });
-    
-    res.json({ 
-      success: true, 
-      message: 'Cache rebuild started in background' 
+
+    res.json({
+      success: true,
+      message: 'Cache rebuild started in background'
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -2662,17 +2663,17 @@ app.post('/api/thumbnails/generate', requireAuth, requireAdmin, async (req, res)
     if (!status.initialized) {
       return res.status(503).json({ error: 'Thumbnail generator not initialized' });
     }
-    
+
     // Run generation in background
     thumbnailGenerator.generateAllThumbnails().then(stats => {
       console.log(`✅ Bulk thumbnail generation completed: ${stats.generated} generated, ${stats.skipped} skipped, ${stats.failed} failed`);
     }).catch(err => {
       console.error('❌ Bulk thumbnail generation failed:', err.message);
     });
-    
-    res.json({ 
-      success: true, 
-      message: 'Thumbnail generation started in background' 
+
+    res.json({
+      success: true,
+      message: 'Thumbnail generation started in background'
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -2686,17 +2687,17 @@ app.post('/api/thumbnails/sync', requireAuth, requireAdmin, async (req, res) => 
     if (!status.initialized) {
       return res.status(503).json({ error: 'Thumbnail generator not initialized' });
     }
-    
+
     // Run sync in background
     thumbnailGenerator.syncThumbnails().then(stats => {
       console.log(`✅ Thumbnail sync completed: ${stats.generated} generated, ${stats.deleted} orphans deleted, ${stats.failed} failed`);
     }).catch(err => {
       console.error('❌ Thumbnail sync failed:', err.message);
     });
-    
-    res.json({ 
-      success: true, 
-      message: 'Thumbnail sync started in background' 
+
+    res.json({
+      success: true,
+      message: 'Thumbnail sync started in background'
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -2708,7 +2709,7 @@ app.get('/api/about', async (req, res) => {
   try {
     const packageJsonPath = path.join(__dirname, '..', 'package.json');
     const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
-    
+
     res.json({
       version: packageJson.version,
       name: packageJson.name,
@@ -2742,7 +2743,7 @@ app.listen(PORT, async () => {
   console.log(`📋 Admin Panel: http://localhost:${PORT}/admin`);
   console.log(`📖 API Docs: http://localhost:${PORT}/api-docs`);
   console.log(`${'='.repeat(60)}`);
-  
+
   // Initialize cache (non-blocking)
   if (CACHE_ENABLED) {
     fileCache.initializeCache(uploadsPath, {
@@ -2753,6 +2754,6 @@ app.listen(PORT, async () => {
   } else {
     console.log('\n🗄️  Cache Status: Disabled');
   }
-  
+
   console.log('');
 });
