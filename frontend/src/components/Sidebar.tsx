@@ -89,9 +89,9 @@ function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
 
   const tenantItems = useMemo(() => isSuperAdmin
     ? [
-        { icon: List, label: 'List Tenants', onClick: handleListTenants },
-        { icon: Plus, label: 'Create Tenant', onClick: handleCreateTenant },
-      ]
+      { icon: List, label: 'List Tenants', onClick: handleListTenants },
+      { icon: Plus, label: 'Create Tenant', onClick: handleCreateTenant },
+    ]
     : [], [isSuperAdmin, handleListTenants, handleCreateTenant]);
 
   const handleApiTokenClick = useCallback(() => {
@@ -110,13 +110,13 @@ function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
     { icon: Key, label: 'API Token', onClick: handleApiTokenClick },
     ...(isAdmin
       ? [
-          { icon: Users, label: 'Users', onClick: handleUsersClick },
-        ]
+        { icon: Users, label: 'Users', onClick: handleUsersClick },
+      ]
       : []),
     ...(isSuperAdmin
       ? [
-          { icon: Settings, label: 'Settings', onClick: handleSettingsClick },
-        ]
+        { icon: Settings, label: 'Settings', onClick: handleSettingsClick },
+      ]
       : []),
   ], [isAdmin, isSuperAdmin, handleApiTokenClick, handleUsersClick, handleSettingsClick]);
 
@@ -136,7 +136,7 @@ function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
             </motion.span>
           )}
         </div>
-        
+
         {/* Mobile close button */}
         {isMobileOpen && (
           <button
@@ -146,7 +146,7 @@ function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
             <X className="w-5 h-5" />
           </button>
         )}
-        
+
         {/* Collapse button - desktop only */}
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -336,7 +336,7 @@ function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
             </div>
           )}
         </div>
-{(() => {
+        {(() => {
           const logoutButton = (
             <button
               onClick={handleLogout}

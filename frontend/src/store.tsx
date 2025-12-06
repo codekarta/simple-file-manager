@@ -11,7 +11,7 @@ interface AppContextValue {
   // Auth state
   isAuthenticated: boolean;
   user: User | null;
-  isLoading: boolean;
+  isAuthLoading: boolean; // Renamed from isLoading
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -24,6 +24,7 @@ interface AppContextValue {
   // File state
   currentPath: string;
   files: FileItem[];
+  isFilesLoading: boolean; // New state for file loading
   pagination: Pagination | null;
   selectedFiles: Set<string>;
   setCurrentPath: (path: string) => void;
@@ -39,6 +40,8 @@ interface AppContextValue {
   // Optimistic updates
   optimisticFiles: FileItem[];
   deleteFileOptimistic: (path: string) => void;
+  addFileOptimistic: (file: FileItem) => void;
+  renameFileOptimistic: (path: string, newName: string, newPath: string) => void;
 
   // Storage info
   storageInfo: StorageInfo | null;
@@ -83,7 +86,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(true); // Renamed from isLoading
 
   // Tenant state
   const [currentTenantId, setCurrentTenantId] = useState<string | null>(() =>
@@ -93,13 +96,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // File state
   const [currentPath, setCurrentPath] = useState('');
   const [files, setFiles] = useState<FileItem[]>([]);
+  const [isFilesLoading, setIsFilesLoading] = useState(false); // New state
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
 
   // Optimistic updates for files
+  type OptimisticAction =
+    | { type: 'delete'; path: string }
+    | { type: 'add'; file: FileItem }
+    | { type: 'rename'; path: string; newName: string; newPath: string };
+
   const [optimisticFiles, setOptimisticFiles] = useOptimistic(
     files,
-    (state, deletedPath: string) => state.filter((f) => f.path !== deletedPath)
+    (state, action: OptimisticAction) => {
+      switch (action.type) {
+        case 'delete':
+          return state.filter((f) => f.path !== action.path);
+        case 'add':
+          return [...state, action.file].sort((a, b) => {
+            if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+            return a.name.localeCompare(b.name);
+          });
+        case 'rename':
+          return state.map((f) =>
+            f.path === action.path
+              ? { ...f, name: action.newName, path: action.newPath }
+              : f
+          );
+        default:
+          return state;
+      }
+    }
   );
 
   // Storage info
@@ -158,7 +185,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Auth functions
   const checkAuth = useCallback(async () => {
     try {
-      setIsLoading(true);
+      setIsAuthLoading(true);
       const status = await api.checkAuthStatus();
       setIsAuthenticated(status.authenticated);
       setUser(status.user);
@@ -166,7 +193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setIsAuthenticated(false);
       setUser(null);
     } finally {
-      setIsLoading(false);
+      setIsAuthLoading(false);
     }
   }, []);
 
@@ -213,19 +240,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // File functions
   const loadFiles = useCallback(async (path?: string, page?: number, tenantIdOverride?: string | null) => {
     try {
-      setIsLoading(true);
+      setIsFilesLoading(true);
       let targetPath = path ?? currentPath;
-      
+
       // Handle special "all-files" marker path - show tenant root folders only
       if (targetPath === '__all_files__' || targetPath === 'all-files') {
         targetPath = 'all-files';
-        
+
         // Only show tenant folders for super admin
         if (user?.role === 'super_admin') {
           try {
             // Get all tenants and show them as folders
             const tenants = await api.listTenants();
-            
+
             // Transform tenants to FileItem format with tenant names
             const tenantFolders: FileItem[] = tenants.map(tenant => ({
               name: tenant.name, // Use tenant name instead of ID
@@ -240,18 +267,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
               tenantId: tenant.tenantId,
               tenantName: tenant.name,
             }));
-            
+
             // Sort by tenant name
-            tenantFolders.sort((a, b) => 
+            tenantFolders.sort((a, b) =>
               (a.tenantName || '').localeCompare(b.tenantName || '')
             );
-            
+
             // Apply pagination
             const total = tenantFolders.length;
             const currentPage = page || 1;
             const offset = (currentPage - 1) * itemsPerPage;
             const paginatedFolders = tenantFolders.slice(offset, offset + itemsPerPage);
-            
+
             setFiles(paginatedFolders);
             setPagination({
               page: currentPage,
@@ -264,13 +291,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setCurrentPath('all-files');
             setSelectedFiles(new Set());
             setSearchQuery('');
-            setIsLoading(false);
+            setIsFilesLoading(false);
             return;
           } catch (error) {
             if (error instanceof Error) {
               showToast(error.message, 'error');
             }
-            setIsLoading(false);
+            setIsFilesLoading(false);
             return;
           }
         } else {
@@ -280,18 +307,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setCurrentPath('all-files');
           setSelectedFiles(new Set());
           setSearchQuery('');
-          setIsLoading(false);
+          setIsFilesLoading(false);
           return;
         }
       }
-      
+
       // Determine tenantId: use override if provided, otherwise currentTenantId, or user's tenantId, or null for super admin
       let tenantId: string | null = tenantIdOverride !== undefined ? tenantIdOverride : currentTenantId;
       if (!tenantId && user?.tenantId) {
         tenantId = user.tenantId;
       }
       // Super admin can view all tenants or root (null)
-      
+
       const response = await api.getFiles(
         targetPath,
         page || 1,
@@ -311,7 +338,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         showToast(error.message, 'error');
       }
     } finally {
-      setIsLoading(false);
+      setIsFilesLoading(false);
     }
   }, [currentPath, itemsPerPage, showHiddenFiles, currentTenantId, user]);
 
@@ -322,15 +349,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     try {
       setIsSearching(true);
-      
+
       // Check if we're on "all-files" view - search across all tenants
       const isOnAllFilesView = currentPath === 'all-files' && user?.role === 'super_admin';
-      
+
       if (isOnAllFilesView) {
         // Search across all tenants' files and folders
         const tenants = await api.listTenants();
         const useRegex = regex ?? isRegexSearch;
-        
+
         // Search files in each tenant
         const searchPromises = tenants.map(async (tenant) => {
           try {
@@ -344,12 +371,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
               tenant.tenantId,
               '' // Search from tenant root, not a specific subfolder
             );
-            
+
             // Return empty array if no results (only show tenants where files actually exist)
             if (!searchResponse.results || searchResponse.results.length === 0) {
               return [];
             }
-            
+
             // Deduplicate results within this tenant's search results
             const seenInTenant = new Map<string, FileItem>();
             searchResponse.results.forEach((file) => {
@@ -357,13 +384,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
               // Normalize the path to handle edge cases
               const normalizedPath = (file.path || '').trim();
               const uniqueKey = normalizedPath || `${file.name}_${file.isDirectory ? 'dir' : 'file'}`;
-              
+
               // Only add if we haven't seen this path before
               if (!seenInTenant.has(uniqueKey)) {
                 seenInTenant.set(uniqueKey, file);
               }
             });
-            
+
             // Convert deduplicated results and add tenant info
             return Array.from(seenInTenant.values()).map((file) => ({
               ...file,
@@ -379,14 +406,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return [];
           }
         });
-        
+
         const allResultsArrays = await Promise.all(searchPromises);
         const allResults = allResultsArrays.flat();
-        
+
         // Deduplicate results to ensure each file appears only once per tenant
         // Use a combination of tenantId and file path to create unique keys
         const uniqueResultsMap = new Map<string, FileItem>();
-        
+
         allResults.forEach((file) => {
           // Extract the original file path (before we added tenant prefix)
           // The path format after transformation is: "tenantId:originalPath"
@@ -395,7 +422,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const parts = file.path.split(':');
             originalPath = parts.slice(1).join(':') || parts[1] || '';
           }
-          
+
           // Extract original name (remove tenant prefix from display name)
           // Display name format is: "TenantName/FileName"
           let originalName = file.name || '';
@@ -403,24 +430,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const parts = file.name.split('/');
             originalName = parts.slice(1).join('/') || parts[1] || '';
           }
-          
+
           // Create a unique key: tenantId + normalized file path
           // This ensures same file from same tenant only appears once
           // Use path if available, otherwise use name
           const fileIdentifier = originalPath || originalName || file.name || '';
           const normalizedIdentifier = fileIdentifier.trim().toLowerCase();
           const uniqueKey = `${file.tenantId || 'unknown'}:${normalizedIdentifier}`;
-          
+
           // Only keep the first occurrence of this tenant+file combination
           // This prevents duplicates even if search returns same file multiple times
           if (!uniqueResultsMap.has(uniqueKey)) {
             uniqueResultsMap.set(uniqueKey, file);
           }
         });
-        
+
         // Convert map back to array (this gives us deduplicated results)
         const uniqueResults = Array.from(uniqueResultsMap.values());
-        
+
         // Sort results: directories first, then by tenant name, then by file name
         uniqueResults.sort((a, b) => {
           if (a.isDirectory && !b.isDirectory) return -1;
@@ -433,13 +460,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const bOriginalName = b.name.includes('/') ? b.name.split('/').pop() || b.name : b.name;
           return aOriginalName.toLowerCase().localeCompare(bOriginalName.toLowerCase());
         });
-        
+
         // Apply pagination
         const total = uniqueResults.length;
         const currentPage = 1;
         const offset = 0;
         const paginatedResults = uniqueResults.slice(offset, offset + itemsPerPage);
-        
+
         setFiles(paginatedResults);
         setPagination({
           page: currentPage,
@@ -452,15 +479,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setSelectedFiles(new Set());
         return;
       }
-      
+
       // Check if we're on tenants list page (super admin viewing tenants)
       // We check files to see if we're currently viewing tenant folders
-      const isOnTenantsList = user?.role === 'super_admin' && 
-                               !currentTenantId && 
-                               currentPath === '' && 
-                               files.length > 0 &&
-                               files.some(f => f.isTenant);
-      
+      const isOnTenantsList = user?.role === 'super_admin' &&
+        !currentTenantId &&
+        currentPath === '' &&
+        files.length > 0 &&
+        files.some(f => f.isTenant);
+
       if (isOnTenantsList) {
         // Search/filter tenants client-side
         const allTenants = await api.listTenants();
@@ -473,14 +500,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
               return regexPattern.test(tenant.name) || regexPattern.test(tenant.tenantId);
             } catch {
               // Invalid regex, fall back to simple search
-              return tenant.name.toLowerCase().includes(searchTerm) || 
-                     tenant.tenantId.toLowerCase().includes(searchTerm);
+              return tenant.name.toLowerCase().includes(searchTerm) ||
+                tenant.tenantId.toLowerCase().includes(searchTerm);
             }
           }
-          return tenant.name.toLowerCase().includes(searchTerm) || 
-                 tenant.tenantId.toLowerCase().includes(searchTerm);
+          return tenant.name.toLowerCase().includes(searchTerm) ||
+            tenant.tenantId.toLowerCase().includes(searchTerm);
         });
-        
+
         // Convert tenants to FileItem format
         const tenantItems: FileItem[] = filteredTenants.map(tenant => ({
           name: tenant.name,
@@ -493,7 +520,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           thumbnailUrl: null,
           isTenant: true
         }));
-        
+
         setFiles(tenantItems);
         setPagination({
           page: 1,
@@ -506,17 +533,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setSelectedFiles(new Set());
         return;
       }
-      
+
       // Determine tenantId - enforce tenant scope for tenant users
       let tenantId: string | null = currentTenantId;
-      
+
       // For tenant users, always enforce their tenant (search scoped to their tenant only)
       if (user?.tenantId && user?.role !== 'super_admin') {
         tenantId = user.tenantId;
       } else if (!tenantId && user?.tenantId) {
         tenantId = user.tenantId;
       }
-      
+
       // Determine search path - if we're inside a tenant folder, search only within current path and its children
       // Don't search from path if we're in "all-files" view (already handled above)
       let searchPath = '';
@@ -524,7 +551,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // When inside a tenant folder, search only within current path (scoped search)
         searchPath = currentPath;
       }
-      
+
       const response = await api.searchFiles(
         query,
         regex ?? isRegexSearch,
@@ -583,9 +610,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return selectedFiles.has(path);
   }, [selectedFiles]);
 
-  // Optimistic delete
+  // Optimistic actions
   const deleteFileOptimistic = useCallback((path: string) => {
-    setOptimisticFiles(path);
+    setOptimisticFiles({ type: 'delete', path });
+  }, [setOptimisticFiles]);
+
+  const addFileOptimistic = useCallback((file: FileItem) => {
+    setOptimisticFiles({ type: 'add', file });
+  }, [setOptimisticFiles]);
+
+  const renameFileOptimistic = useCallback((path: string, newName: string, newPath: string) => {
+    setOptimisticFiles({ type: 'rename', path, newName, newPath });
   }, [setOptimisticFiles]);
 
   // Storage info
@@ -658,7 +693,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Auth
     isAuthenticated,
     user,
-    isLoading,
+    isAuthLoading, // Renamed
     login,
     logout,
     checkAuth,
@@ -671,6 +706,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Files
     currentPath,
     files,
+    isFilesLoading, // New
     pagination,
     selectedFiles,
     setCurrentPath,
@@ -686,6 +722,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Optimistic
     optimisticFiles,
     deleteFileOptimistic,
+    addFileOptimistic, // New
+    renameFileOptimistic, // New
 
     // Storage
     storageInfo,
@@ -723,11 +761,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     openEditor,
     closeEditor,
   }), [
-    isAuthenticated, user, isLoading, login, logout, checkAuth, refreshUser,
+    isAuthenticated, user, isAuthLoading, login, logout, checkAuth, refreshUser,
     currentTenantId, setCurrentTenantIdWithStorage,
-    currentPath, files, pagination, selectedFiles, setCurrentPath, loadFiles, searchFilesHandler,
+    currentPath, files, isFilesLoading, pagination, selectedFiles, setCurrentPath, loadFiles, searchFilesHandler,
     selectFile, deselectFile, toggleFileSelection, selectAllFiles, clearSelection, isFileSelected,
-    optimisticFiles, deleteFileOptimistic,
+    optimisticFiles, deleteFileOptimistic, addFileOptimistic, renameFileOptimistic, // Added dependencies
     storageInfo, refreshStorageInfo,
     viewMode, setViewMode, showHiddenFiles, setShowHiddenFiles, sidebarCollapsed, setSidebarCollapsed, itemsPerPage, setItemsPerPage,
     searchQuery, setSearchQuery, isRegexSearch, setIsRegexSearch, isSearching,
@@ -749,14 +787,15 @@ export function useApp() {
 
 // Convenience hooks
 export function useAuth() {
-  const { isAuthenticated, user, isLoading, login, logout, checkAuth, refreshUser } = useApp();
-  return { isAuthenticated, user, isLoading, login, logout, checkAuth, refreshUser };
+  const { isAuthenticated, user, isAuthLoading, login, logout, checkAuth, refreshUser } = useApp();
+  return { isAuthenticated, user, isAuthLoading, login, logout, checkAuth, refreshUser };
 }
 
 export function useFiles() {
   const {
     currentPath,
     files,
+    isFilesLoading, // New
     optimisticFiles,
     pagination,
     selectedFiles,
@@ -770,11 +809,13 @@ export function useFiles() {
     clearSelection,
     isFileSelected,
     deleteFileOptimistic,
-    isLoading,
+    addFileOptimistic, // New
+    renameFileOptimistic, // New
   } = useApp();
   return {
     currentPath,
     files,
+    isFilesLoading, // New
     optimisticFiles,
     pagination,
     selectedFiles,
@@ -788,7 +829,8 @@ export function useFiles() {
     clearSelection,
     isFileSelected,
     deleteFileOptimistic,
-    isLoading,
+    addFileOptimistic, // New
+    renameFileOptimistic, // New
   };
 }
 

@@ -8,7 +8,7 @@ import type { RenameData } from '../types';
 import * as api from '../api';
 
 export default function RenameModal() {
-  const { currentPath, loadFiles } = useFiles();
+  const { currentPath, loadFiles, renameFileOptimistic } = useFiles();
   const { activeModal, modalData, closeModal } = useModal();
   const { showToast, user, currentTenantId } = useApp();
 
@@ -35,13 +35,21 @@ export default function RenameModal() {
         if (!tenantId && user?.tenantId) {
           tenantId = user.tenantId;
         }
-        
+
+        // Calculate new path for optimistic update
+        const parentPath = data.path.substring(0, data.path.lastIndexOf('/'));
+        const newPath = parentPath ? `${parentPath}/${newName.trim()}` : newName.trim();
+
+        // Apply optimistic update
+        renameFileOptimistic(data.path, newName.trim(), newPath);
+
         await api.renameItem(data.path, newName.trim(), tenantId);
         showToast(`Renamed to "${newName}"`, 'success');
         loadFiles(currentPath);
         closeModal();
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Failed to rename', 'error');
+        loadFiles(currentPath); // Revert on error
       }
     },
     null

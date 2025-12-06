@@ -8,7 +8,6 @@ import Pagination from './Pagination';
 import EmptyState from './EmptyState';
 import FileEditor from './FileEditor';
 import SystemResourcesDashboard from './SystemResourcesDashboard';
-import { LoadingOverlay } from './Spinner';
 import { formatFileSize, cn } from '../utils';
 import * as api from '../api';
 
@@ -25,7 +24,7 @@ interface UploadItem {
 }
 
 function FileExplorer() {
-  const { optimisticFiles, isLoading, currentPath, loadFiles } = useFiles();
+  const { optimisticFiles, isFilesLoading, currentPath, loadFiles } = useFiles();
   const { viewMode, searchQuery, showToast } = useUI();
   const { refreshStorageInfo } = useStorage();
   const { user, currentTenantId, openFile, closeEditor } = useApp();
@@ -71,7 +70,7 @@ function FileExplorer() {
   // Process dropped files and folders
   const processEntry = async (entry: FileSystemEntry, path: string = ''): Promise<File[]> => {
     const files: File[] = [];
-    
+
     if (entry.isFile) {
       const fileEntry = entry as FileSystemFileEntry;
       const file = await new Promise<File>((resolve, reject) => {
@@ -89,14 +88,14 @@ function FileExplorer() {
       const entries = await new Promise<FileSystemEntry[]>((resolve, reject) => {
         reader.readEntries(resolve, reject);
       });
-      
+
       for (const childEntry of entries) {
         const childPath = path ? `${path}/${entry.name}` : entry.name;
         const childFiles = await processEntry(childEntry, childPath);
         files.push(...childFiles);
       }
     }
-    
+
     return files;
   };
 
@@ -114,7 +113,7 @@ function FileExplorer() {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const entry = item.webkitGetAsEntry?.();
-      
+
       if (entry) {
         try {
           const files = await processEntry(entry);
@@ -167,7 +166,7 @@ function FileExplorer() {
         if (!tenantId && user?.tenantId) {
           tenantId = user.tenantId;
         }
-        
+
         await api.uploadSingleFile(
           item.file,
           currentPath,
@@ -246,7 +245,7 @@ function FileExplorer() {
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      {isLoading && <LoadingOverlay />}
+      {/* isLoading removed - using localized isFilesLoading below */}
 
       {/* Drag overlay */}
       <AnimatePresence>
@@ -278,18 +277,27 @@ function FileExplorer() {
       ) : user?.role === 'super_admin' && !currentTenantId && currentPath === '' && !searchQuery && !hasTenantFolders ? (
         // Show system resources dashboard for super admin at home (when no tenant folders are loaded)
         <SystemResourcesDashboard />
-      ) : isEmpty ? (
-        <EmptyState
-          type={searchQuery ? 'search' : 'empty'}
-          searchQuery={searchQuery}
-        />
       ) : (
-        <>
-          <div className="flex-1 overflow-auto">
-            {viewMode === 'table' ? <FileTable /> : <FileGrid />}
-          </div>
-          <Pagination />
-        </>
+        <div className="flex-1 overflow-hidden flex flex-col relative">
+          {isFilesLoading && (
+            <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-10 flex items-center justify-center">
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+          {isEmpty ? (
+            <EmptyState
+              type={searchQuery ? 'search' : 'empty'}
+              searchQuery={searchQuery}
+            />
+          ) : (
+            <>
+              <div className="flex-1 overflow-auto">
+                {viewMode === 'table' ? <FileTable /> : <FileGrid />}
+              </div>
+              <Pagination />
+            </>
+          )}
+        </div>
       )}
 
       {/* Upload Progress Panel */}
@@ -309,8 +317,8 @@ function FileExplorer() {
                   {isAllCompleted
                     ? 'Upload Complete'
                     : uploadingCount > 0
-                    ? `Uploading ${uploadingCount} of ${uploads.length}...`
-                    : `${pendingCount} files pending`}
+                      ? `Uploading ${uploadingCount} of ${uploads.length}...`
+                      : `${pendingCount} files pending`}
                 </span>
               </div>
               <div className="flex items-center gap-1">

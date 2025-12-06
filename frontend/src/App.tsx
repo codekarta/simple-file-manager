@@ -7,10 +7,10 @@ import { ToastContainer } from './components/Toast';
 import './index.css';
 
 function AppContent() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isAuthLoading } = useAuth(); // rename isLoading to isAuthLoading
   const { toast, showToast } = useUI();
 
-  if (isLoading) {
+  if (isAuthLoading) {
     return <LoadingScreen />;
   }
 
