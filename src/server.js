@@ -445,6 +445,18 @@ app.get('/llms.md', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'Simple-file-server-llms.md'));
 });
 
+// ===== HEALTH CHECK API ROUTE =====
+
+// Health check endpoint (no authentication required)
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    service: 'Simple File Manager'
+  });
+});
+
 // ===== AUTHENTICATION API ROUTES =====
 
 // Login
