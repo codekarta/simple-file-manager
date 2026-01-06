@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, startTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -35,10 +35,15 @@ export default function SlideshowModal() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const isOpen = activeModal === 'slideshow';
+  const prevIsOpenRef = useRef(isOpen);
 
   // Filter image and video files
-  const mediaFiles = optimisticFiles.filter(
-    (file) => !file.isDirectory && (isImageFile(file.name) || isVideoFile(file.name))
+  const mediaFiles = useMemo(
+    () =>
+      optimisticFiles.filter(
+        (file) => !file.isDirectory && (isImageFile(file.name) || isVideoFile(file.name))
+      ),
+    [optimisticFiles]
   );
 
   const currentFile = mediaFiles[currentIndex];
@@ -56,7 +61,7 @@ export default function SlideshowModal() {
       setImageError(false);
       setCurrentIndex((prev) => (prev + 1) % mediaFiles.length);
     }
-  }, [mediaFiles.length]);
+  }, [mediaFiles]);
 
   const goToPrev = useCallback(() => {
     if (mediaFiles.length > 0) {
@@ -68,7 +73,7 @@ export default function SlideshowModal() {
       setImageError(false);
       setCurrentIndex((prev) => (prev - 1 + mediaFiles.length) % mediaFiles.length);
     }
-  }, [mediaFiles.length]);
+  }, [mediaFiles]);
 
   const goToIndex = useCallback((index: number) => {
     setImageLoaded(false);
@@ -119,6 +124,26 @@ export default function SlideshowModal() {
       videoRef.current.pause();
     }
   }, [currentIndex, isVideo, isPlaying]);
+
+  // Fullscreen handling
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen?.();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen?.();
+      setIsFullscreen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Keyboard navigation
   useEffect(() => {
@@ -172,42 +197,33 @@ export default function SlideshowModal() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, goToNext, goToPrev, closeModal, isFullscreen]);
+  }, [isOpen, goToNext, goToPrev, closeModal, isFullscreen, toggleFullscreen, isVideo]);
 
   // Reset on close or update index when modal opens with new initialIndex
   useEffect(() => {
-    if (!isOpen) {
-      setCurrentIndex(0);
-      setIsPlaying(false);
-      setImageLoaded(false);
-      setImageError(false);
-    } else if (initialIndex !== undefined && initialIndex >= 0 && initialIndex < mediaFiles.length) {
-      // Set initial index when modal opens
-      setCurrentIndex(initialIndex);
-      setImageLoaded(false);
-      setImageError(false);
+    const wasOpen = prevIsOpenRef.current;
+    prevIsOpenRef.current = isOpen;
+
+    if (wasOpen && !isOpen) {
+      // Reset state when modal closes (transition from open to closed)
+      startTransition(() => {
+        setCurrentIndex(0);
+        setIsPlaying(false);
+        setImageLoaded(false);
+        setImageError(false);
+      });
+      return;
+    }
+    
+    // Set initial index when modal opens with new initialIndex
+    if (isOpen && initialIndex !== undefined && initialIndex >= 0 && initialIndex < mediaFiles.length) {
+      startTransition(() => {
+        setCurrentIndex(initialIndex);
+        setImageLoaded(false);
+        setImageError(false);
+      });
     }
   }, [isOpen, initialIndex, mediaFiles.length]);
-
-  // Fullscreen handling
-  const toggleFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen?.();
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen?.();
-      setIsFullscreen(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
 
   // Get image URL - encode path segments properly
   const getImageUrl = (file: FileItem) => {
@@ -540,3 +556,10 @@ export default function SlideshowModal() {
     </AnimatePresence>
   );
 }
+
+
+
+
+
+
+
